@@ -1,25 +1,36 @@
 import json
+import time
 from pathlib import Path
+from typing import Dict, List
 
-import random
 import sc2
 from sc2.constants import *
+from sc2.position import Point2
 from sc2.unit import Unit
+from sc2.units import Units
 
 
 class MyBot(sc2.BotAI):
     with open(Path(__file__).parent / "../botinfo.json") as f:
         NAME = json.load(f)["name"]
 
+    def __init__(self):
+        self.last_scout_time = 0
+        self.army_overlord_tag = 0
+        self.resource_list: List[List] = None
+        self.expansion_locs = {}
+
     def select_target(self):
         if self.known_enemy_structures.exists:
-            return random.choice(self.known_enemy_structures).position
-
+            return self.known_enemy_structures.closest_to(self.start_location).position
         return self.enemy_start_locations[0]
 
     async def on_step(self, iteration):
         larvae = self.units(LARVA)
         forces = self.units(ZERGLING) | self.units(HYDRALISK)
+
+        self.calc_resource_list()
+        self.calc_expansion_loc()
 
         if self.townhalls.amount <= 0:
             for unit in self.units(DRONE) | self.units(QUEEN) | forces:
@@ -56,18 +67,31 @@ class MyBot(sc2.BotAI):
                     await self.do(queen(EFFECT_INJECTLARVA, t))
 
         t = self.nearby_enemies()
+        actions = []
         if t is not None:
             for unit in forces:
-                await self.do(unit.attack(t.position))
+                actions.append(unit.attack(t.position))
         elif self.supply_used > 190:
+            target = self.select_target()
+
+            army_overlord = self.units(OVERLORD).find_by_tag(self.army_overlord_tag)
+            if army_overlord is None:
+                army_overlord = self.units(OVERLORD).random
+                self.army_overlord_tag = army_overlord.tag
+            actions.append(
+                army_overlord.move(target)
+            )
+
             for unit in forces:
                 unit: Unit = unit
                 if not unit.is_attacking:
-                    await self.do(unit.attack(self.select_target()))
+                    actions.append(unit.attack(target))
         else:
             far_h = self.townhalls.furthest_to(self.start_location)
             for unit in forces.further_than(10, far_h.position):
-                await self.do(unit.move(far_h.position.random_on_distance(5)))
+                if not unit.is_moving:
+                    actions.append(unit.move(far_h.position.random_on_distance(5)))
+        await self.do_actions(actions)
 
         # supply_cap does not include overload that is being built
         if (self.units(OVERLORD).amount + self.already_pending(OVERLORD)) * 8 - self.supply_used < 2:
@@ -97,13 +121,27 @@ class MyBot(sc2.BotAI):
             if self.can_afford(SPAWNINGPOOL):
                 await self.build(SPAWNINGPOOL, near=hq)
 
-        if self.should_expand():
-            await self.expand_now(HATCHERY)
+        if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
+            empty_expansions = set()
+            for loc in self.expansion_locs:
+                loc: Point2 = loc
+                if self.townhalls.closer_than(self.EXPANSION_GAP_THRESHOLD, loc).amount == 0:
+                    empty_expansions.add(loc)
+            pos = self.start_location.closest(empty_expansions)
+            print(pos)
+            await self.do(self.workers.random.build(HATCHERY, pos))
 
         if self.units(LAIR).ready.exists:
             if not (self.units(HYDRALISKDEN).exists or self.already_pending(HYDRALISKDEN) > 0):
                 if self.can_afford(HYDRALISKDEN):
                     await self.build(HYDRALISKDEN, near=hq)
+
+        if self.units(OVERLORD).amount == 1:
+            o: Unit = self.units(OVERLORD).first
+            await self.do_actions([
+                o.move(self.enemy_start_locations[0]),
+                o.move(self.game_info.map_center, queue=True)
+            ])
 
         if self.should_build_extractor():
             drone = self.workers.random
@@ -159,3 +197,51 @@ class MyBot(sc2.BotAI):
             t: Unit = t
             total_ideal_harvesters += t.ideal_harvesters
         return total_ideal_harvesters < 16 * 3
+
+    def calc_resource_list(self):
+        if self.resource_list is not None:
+            return
+        RESOURCE_SPREAD_THRESHOLD = 144
+        all_resources = self.state.mineral_field | self.state.vespene_geyser
+        # Group nearby minerals together to form expansion locations
+        r_groups = []
+        for mf in all_resources:
+            mf_height = self.get_terrain_height(mf.position)
+            for g in r_groups:
+                if any(
+                    mf_height == self.get_terrain_height(p.position)
+                    and mf.position._distance_squared(p.position) < RESOURCE_SPREAD_THRESHOLD
+                    for p in g
+                ):
+                    g.append(mf)
+                    break
+            else:  # not found
+                r_groups.append([mf])
+        # Filter out bases with only one mineral field
+        self.resource_list = [g for g in r_groups if len(g) > 1]
+
+    def calc_expansion_loc(self):
+        if not self.resource_list or len(self.resource_list) == 0:
+            return
+        # distance offsets from a gas geysir
+        offsets = [(x, y) for x in range(-9, 10) for y in range(-9, 10) if 75 >= x ** 2 + y ** 2 >= 49]
+        # for every resource group:
+        resources = self.resource_list.pop()
+        # possible expansion points
+        # resources[-1] is a gas geysir which always has (x.5, y.5) coordinates, just like an expansion
+        possible_points = (
+            Point2((offset[0] + resources[-1].position.x, offset[1] + resources[-1].position.y))
+            for offset in offsets
+        )
+        # filter out points that are too near
+        possible_points = [
+            point
+            for point in possible_points
+            if all(
+                point.distance_to(resource) >= (6 if resource in self.state.mineral_field else 7)
+                for resource in resources
+            )
+        ]
+        # choose best fitting point
+        result = min(possible_points, key=lambda p: sum(p.distance_to(resource) for resource in resources))
+        self.expansion_locs[result] = resources

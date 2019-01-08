@@ -11,10 +11,10 @@ def main():
 
     race = Race[info["race"]]
 
-    run_game(maps.get("Abyssal Reef LE"), [
+    run_game(maps.get("Acolyte LE"), [
         Bot(race, MyBot()),
         Computer(Race.Random, Difficulty.VeryHard)
-    ], realtime=False, step_time_limit=5.0, game_time_limit=(60*20), save_replay_as="test.SC2Replay")
+    ], realtime=False, step_time_limit=2.0, game_time_limit=(60*20), save_replay_as="test.SC2Replay")
 
 if __name__ == '__main__':
     main()
