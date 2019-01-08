@@ -128,7 +128,6 @@ class MyBot(sc2.BotAI):
                 if self.townhalls.closer_than(self.EXPANSION_GAP_THRESHOLD, loc).amount == 0:
                     empty_expansions.add(loc)
             pos = self.start_location.closest(empty_expansions)
-            print(pos)
             await self.do(self.workers.random.build(HATCHERY, pos))
 
         if self.units(LAIR).ready.exists:
