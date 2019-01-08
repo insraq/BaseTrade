@@ -55,9 +55,15 @@ class MyBot(sc2.BotAI):
                 if AbilityId.EFFECT_INJECTLARVA in abilities:
                     await self.do(queen(EFFECT_INJECTLARVA, t))
 
-        if self.supply_used > 190:
-            for unit in forces.idle:
-                await self.do(unit.attack(self.select_target()))
+        t = self.nearby_enemies()
+        if t is not None:
+            for unit in forces:
+                await self.do(unit.attack(t.position))
+        elif self.supply_used > 190:
+            for unit in forces:
+                unit: Unit = unit
+                if not unit.is_attacking:
+                    await self.do(unit.attack(self.select_target()))
         else:
             far_h = self.townhalls.furthest_to(self.start_location)
             for unit in forces.further_than(10, far_h.position):
@@ -132,6 +138,14 @@ class MyBot(sc2.BotAI):
             return self.units(EXTRACTOR).amount < self.townhalls.amount * 2 - 2
         else:
             return self.units(EXTRACTOR).amount < self.townhalls.amount * 2
+
+    def nearby_enemies(self):
+        for t in self.townhalls:
+            t: Unit = t
+            threats = self.known_enemy_units.closer_than(10, t.position)
+            if threats.amount > 10:
+                return threats.random
+        return None
 
     def should_expand(self):
         if self.minerals < 300 or self.already_pending(HATCHERY) > 0:
