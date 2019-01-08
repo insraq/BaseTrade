@@ -1,13 +1,11 @@
 import json
-import time
 from pathlib import Path
-from typing import Dict, List
+from typing import List
 
 import sc2
 from sc2.constants import *
 from sc2.position import Point2
 from sc2.unit import Unit
-from sc2.units import Units
 
 
 class MyBot(sc2.BotAI):
@@ -19,6 +17,15 @@ class MyBot(sc2.BotAI):
         self.army_overlord_tag = 0
         self.resource_list: List[List] = None
         self.expansion_locs = {}
+        self.hq: Unit = None
+        self.build_order = [
+            SPAWNINGPOOL,
+            # ROACHWARREN,
+            EVOLUTIONCHAMBER,
+            HYDRALISKDEN,
+            # SPIRE,
+        ]
+        self.production_order = []
 
     def select_target(self):
         if self.known_enemy_structures.exists:
@@ -27,25 +34,27 @@ class MyBot(sc2.BotAI):
 
     async def on_step(self, iteration):
         larvae = self.units(LARVA)
-        forces = self.units(ZERGLING) | self.units(HYDRALISK)
+        forces = self.units(ZERGLING) | self.units(HYDRALISK) | self.units(ROACH) | self.units(MUTALISK)
 
+        self.production_order = []
         self.calc_resource_list()
         self.calc_expansion_loc()
+
+        # supply_cap does not include overload that is being built
+        if (self.units(OVERLORD).amount + self.already_pending(OVERLORD)) * 8 - self.supply_used < 2:
+            if self.can_afford(OVERLORD) and larvae.exists:
+                await self.do(larvae.random.train(OVERLORD))
+                return
 
         if self.townhalls.amount <= 0:
             for unit in self.units(DRONE) | self.units(QUEEN) | forces:
                 await self.do(unit.attack(self.enemy_start_locations[0]))
             return
         else:
-            hq = self.townhalls.closest_to(self.start_location)
+            self.hq = self.townhalls.closest_to(self.start_location)
 
         for t in self.townhalls.ready:
             t: Unit = t
-
-            if t.assigned_harvesters < t.ideal_harvesters:
-                if self.can_afford(DRONE) and larvae.exists:
-                    await self.do(larvae.random.train(DRONE))
-                    return
 
             excess_worker = self.workers.closer_than(10, t.position)
             m = self.need_worker_mineral()
@@ -53,11 +62,13 @@ class MyBot(sc2.BotAI):
                 await self.do(excess_worker.random.gather(m))
 
             if (self.units(SPAWNINGPOOL).ready.exists and
-                    t.is_ready and
-                    t.noqueue and
-                    not self.units(QUEEN).closer_than(10, t.position).exists and
-                    self.can_afford(QUEEN)):
+                    t.is_ready and t.noqueue and
+                    not self.units(QUEEN).closer_than(10, t.position).exists):
                 await self.do(t.train(QUEEN))
+                self.production_order.append(QUEEN)
+
+            if t.assigned_harvesters < t.ideal_harvesters:
+                self.production_order.append(DRONE)
 
             queen_nearby = self.units(QUEEN).idle.closer_than(10, t.position)
             if queen_nearby.exists:
@@ -93,33 +104,20 @@ class MyBot(sc2.BotAI):
                     actions.append(unit.move(far_h.position.random_on_distance(5)))
         await self.do_actions(actions)
 
-        # supply_cap does not include overload that is being built
-        if (self.units(OVERLORD).amount + self.already_pending(OVERLORD)) * 8 - self.supply_used < 2:
-            if self.can_afford(OVERLORD) and larvae.exists:
-                await self.do(larvae.random.train(OVERLORD))
-                return
+        if not self.units(LAIR).exists and self.already_pending(LAIR) == 0 and self.can_afford(LAIR):
+            await self.do(self.hq.build(LAIR))
 
-        sp = self.units(SPAWNINGPOOL).ready
-        if sp.exists:
-            if self.already_pending_upgrade(ZERGLINGMOVEMENTSPEED) == 0 and self.can_afford(ZERGLINGMOVEMENTSPEED):
-                await self.do(sp.first.research(ZERGLINGMOVEMENTSPEED))
-            if not self.units(LAIR).exists and hq.noqueue:
-                if self.can_afford(LAIR):
-                    await self.do(hq.build(LAIR))
+        if not self.units(HIVE).exists and self.already_pending(HIVE) == 0 and self.can_afford(HIVE):
+            await self.do(self.hq.build(HIVE))
 
-        hd = self.units(HYDRALISKDEN).ready
-        if hd.exists:
-            if self.already_pending_upgrade(EVOLVEMUSCULARAUGMENTS) == 0 and self.can_afford(EVOLVEMUSCULARAUGMENTS):
-                await self.do(hd.first.research(EVOLVEMUSCULARAUGMENTS))
-            if self.already_pending_upgrade(EVOLVEGROOVEDSPINES) == 0 and self.can_afford(EVOLVEGROOVEDSPINES):
-                await self.do(hd.first.research(EVOLVEGROOVEDSPINES))
-            if self.can_afford(HYDRALISK) and larvae.exists:
-                await self.do(larvae.random.train(HYDRALISK))
-                return
+        self.production_order.append(HYDRALISK)
 
-        if not (self.units(SPAWNINGPOOL).exists or self.already_pending(SPAWNINGPOOL) > 0):
-            if self.can_afford(SPAWNINGPOOL):
-                await self.build(SPAWNINGPOOL, near=hq)
+        if self.minerals - self.vespene > 500:
+            self.production_order.append(ZERGLING)
+
+        await self.build_building()
+        await self.upgrade_building()
+        await self.produce_unit()
 
         if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
             empty_expansions = set()
@@ -130,15 +128,10 @@ class MyBot(sc2.BotAI):
             pos = self.start_location.closest(empty_expansions)
             await self.do(self.workers.random.build(HATCHERY, pos))
 
-        if self.units(LAIR).ready.exists:
-            if not (self.units(HYDRALISKDEN).exists or self.already_pending(HYDRALISKDEN) > 0):
-                if self.can_afford(HYDRALISKDEN):
-                    await self.build(HYDRALISKDEN, near=hq)
-
         if self.units(OVERLORD).amount == 1:
             o: Unit = self.units(OVERLORD).first
             await self.do_actions([
-                o.move(self.enemy_start_locations[0]),
+                o.move(self.enemy_start_locations[0].towards(self.game_info.map_center, 20)),
                 o.move(self.game_info.map_center, queue=True)
             ])
 
@@ -158,10 +151,34 @@ class MyBot(sc2.BotAI):
             mf = self.state.mineral_field.closest_to(d.position)
             await self.do(d.gather(mf))
 
-        if self.units(ZERGLING).amount < 20 and self.minerals - self.vespene > 500:
-            if larvae.exists and self.can_afford(ZERGLING):
-                await self.do(larvae.random.train(ZERGLING))
-                return
+    def economy_first(self):
+        return self.townhalls.amount < 3 or self.units(QUEEN).amount < 3 or self.units(DRONE).amount < 44
+
+    async def upgrade_building(self):
+        if self.economy_first():
+            return
+        for b in self.build_order:
+            u = self.units(b).ready
+            if u.exists and u.first.is_idle:
+                abilities = await self.get_available_abilities(u.first)
+                if len(abilities) > 0:
+                    await self.do(u.first(abilities[0]))
+
+    async def build_building(self):
+        for i, b in enumerate(self.build_order):
+            if ((i == 0 or self.units(self.build_order[i - 1]).exists) and
+                    not self.units(b).exists and
+                    self.already_pending(b) == 0 and
+                    self.can_afford(b)):
+                await self.build(b, near=self.hq.position.towards(self.game_info.map_center, 10))
+
+    async def produce_unit(self):
+        if QUEEN in self.production_order:
+            return
+        for l in self.units(LARVA):
+            for u in self.production_order:
+                if self.can_afford(u):
+                    await self.do(l.train(u))
 
     def need_worker_mineral(self):
         t = self.townhalls.ready.filter(lambda a: a.assigned_harvesters < a.ideal_harvesters)
@@ -171,7 +188,7 @@ class MyBot(sc2.BotAI):
             return None
 
     def should_build_extractor(self):
-        if self.townhalls.amount < 3:
+        if self.townhalls.amount < 5:
             return self.units(EXTRACTOR).amount < self.townhalls.amount * 2 - 2
         else:
             return self.units(EXTRACTOR).amount < self.townhalls.amount * 2
@@ -189,13 +206,13 @@ class MyBot(sc2.BotAI):
             return False
         if self.units(SPAWNINGPOOL).exists and self.townhalls.amount < 2:
             return True
-        if self.units(HYDRALISKDEN).exists and self.townhalls.amount < 3:
+        if self.units(LAIR).exists and self.townhalls.amount < 3:
             return True
         total_ideal_harvesters = 0
         for t in self.townhalls.ready:
             t: Unit = t
             total_ideal_harvesters += t.ideal_harvesters
-        return total_ideal_harvesters < 16 * 3
+        return total_ideal_harvesters < 16 * 4
 
     def calc_resource_list(self):
         if self.resource_list is not None:
@@ -208,9 +225,9 @@ class MyBot(sc2.BotAI):
             mf_height = self.get_terrain_height(mf.position)
             for g in r_groups:
                 if any(
-                    mf_height == self.get_terrain_height(p.position)
-                    and mf.position._distance_squared(p.position) < RESOURCE_SPREAD_THRESHOLD
-                    for p in g
+                        mf_height == self.get_terrain_height(p.position)
+                        and mf.position._distance_squared(p.position) < RESOURCE_SPREAD_THRESHOLD
+                        for p in g
                 ):
                     g.append(mf)
                     break
