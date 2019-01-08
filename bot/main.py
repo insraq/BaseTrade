@@ -71,7 +71,7 @@ class MyBot(sc2.BotAI):
 
         sp = self.units(SPAWNINGPOOL).ready
         if sp.exists:
-            if (ZERGLINGMOVEMENTSPEED not in self.state.upgrades) and self.can_afford(ZERGLINGMOVEMENTSPEED):
+            if self.already_pending_upgrade(ZERGLINGMOVEMENTSPEED) == 0 and self.can_afford(ZERGLINGMOVEMENTSPEED):
                 await self.do(sp.first.research(ZERGLINGMOVEMENTSPEED))
             if not self.units(LAIR).exists and hq.noqueue:
                 if self.can_afford(LAIR):
@@ -79,15 +79,15 @@ class MyBot(sc2.BotAI):
 
         hd = self.units(HYDRALISKDEN).ready
         if hd.exists:
-            if (EVOLVEMUSCULARAUGMENTS not in self.state.upgrades) and self.can_afford(EVOLVEMUSCULARAUGMENTS):
+            if self.already_pending_upgrade(EVOLVEMUSCULARAUGMENTS) == 0 and self.can_afford(EVOLVEMUSCULARAUGMENTS):
                 await self.do(hd.first.research(EVOLVEMUSCULARAUGMENTS))
-            if (EVOLVEGROOVEDSPINES not in self.state.upgrades) and self.can_afford(EVOLVEGROOVEDSPINES):
+            if self.already_pending_upgrade(EVOLVEGROOVEDSPINES) == 0 and self.can_afford(EVOLVEGROOVEDSPINES):
                 await self.do(hd.first.research(EVOLVEGROOVEDSPINES))
             if self.can_afford(HYDRALISK) and larvae.exists:
                 await self.do(larvae.random.train(HYDRALISK))
                 return
 
-        if not (self.units(SPAWNINGPOOL).exists or self.already_pending(SPAWNINGPOOL)):
+        if not (self.units(SPAWNINGPOOL).exists or self.already_pending(SPAWNINGPOOL) > 0):
             if self.can_afford(SPAWNINGPOOL):
                 await self.build(SPAWNINGPOOL, near=hq)
 
@@ -95,18 +95,16 @@ class MyBot(sc2.BotAI):
             await self.expand_now(HATCHERY)
 
         if self.units(LAIR).ready.exists:
-            if not (self.units(HYDRALISKDEN).exists or self.already_pending(HYDRALISKDEN)):
+            if not (self.units(HYDRALISKDEN).exists or self.already_pending(HYDRALISKDEN) > 0):
                 if self.can_afford(HYDRALISKDEN):
                     await self.build(HYDRALISKDEN, near=hq)
 
-        if (self.units(EXTRACTOR).amount < self.townhalls.amount * 2 - 2 and
-                not self.already_pending(EXTRACTOR)):
-            if self.can_afford(EXTRACTOR):
-                drone = self.workers.random
-                target = self.state.vespene_geyser.closest_to(drone.position)
-                err = await self.do(drone.build(EXTRACTOR, target))
+        if self.should_build_extractor():
+            drone = self.workers.random
+            target = self.state.vespene_geyser.closest_to(drone.position)
+            await self.do(drone.build(EXTRACTOR, target))
 
-        for a in self.units(EXTRACTOR):
+        for a in self.units(EXTRACTOR).ready:
             if a.assigned_harvesters < a.ideal_harvesters:
                 w = self.workers.closer_than(20, a)
                 if w.exists:
@@ -129,11 +127,21 @@ class MyBot(sc2.BotAI):
         else:
             return None
 
+    def should_build_extractor(self):
+        if self.townhalls.amount < 3:
+            return self.units(EXTRACTOR).amount < self.townhalls.amount * 2 - 2
+        else:
+            return self.units(EXTRACTOR).amount < self.townhalls.amount * 2
+
     def should_expand(self):
-        if self.minerals < 300 or self.already_pending(HATCHERY):
+        if self.minerals < 300 or self.already_pending(HATCHERY) > 0:
             return False
         if self.units(SPAWNINGPOOL).exists and self.townhalls.amount < 2:
             return True
         if self.units(HYDRALISKDEN).exists and self.townhalls.amount < 3:
             return True
-        return self.units(DRONE).collecting.amount < 66
+        total_ideal_harvesters = 0
+        for t in self.townhalls.ready:
+            t: Unit = t
+            total_ideal_harvesters += t.ideal_harvesters
+        return total_ideal_harvesters < 16 * 3
