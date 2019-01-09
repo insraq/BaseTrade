@@ -60,7 +60,7 @@ class MyBot(sc2.BotAI):
                 await self.train(HYDRALISK)
             for u in self.units:
                 u: Unit = u
-                await self.do(u.attack(enemy_nearby.random))
+                await self.do(u.attack(self.enemy_start_locations[0]))
             return
 
         if self.townhalls.amount <= 0:
@@ -256,7 +256,7 @@ class MyBot(sc2.BotAI):
         for t in self.units.structure:
             t: Unit = t
             threats = self.known_enemy_units.closer_than(10, t.position)
-            if threats.amount > 3:
+            if threats.exists:
                 return threats.random
         return None
 
