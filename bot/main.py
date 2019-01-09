@@ -51,6 +51,18 @@ class MyBot(sc2.BotAI):
                 await self.do(larvae.random.train(OVERLORD))
                 return
 
+        # defend strategy
+        enemy_nearby = self.known_enemy_units.closer_than(15, self.start_location)
+        if enemy_nearby.amount > 4:
+            if self.units(SPAWNINGPOOL).ready.exists:
+                await self.train(ZERGLING)
+            if self.units(HYDRALISKDEN).ready.exists:
+                await self.train(HYDRALISK)
+            for u in self.units:
+                u: Unit = u
+                u.attack(enemy_nearby.random)
+            return
+
         if self.townhalls.amount <= 0:
             for unit in self.units(DRONE) | self.units(QUEEN) | forces:
                 await self.do(unit.attack(self.enemy_start_locations[0]))
@@ -114,16 +126,6 @@ class MyBot(sc2.BotAI):
         await self.call_every(self.scout_expansions, 3 * 60)
         await self.call_every(self.make_overseer, 20)
         await self.call_every(self.scout_watchtower, 60)
-
-        enemy_nearby = self.known_enemy_units.closer_than(15, self.start_location)
-        if enemy_nearby.amount > 5:
-            if self.units(SPAWNINGPOOL).ready.exists:
-                self.production_order = [ZERGLING]
-            if self.units(HYDRALISKDEN).ready.exists:
-                self.production_order = [HYDRALISK]
-            for u in self.units:
-                u: Unit = u
-                u.attack(enemy_nearby.random)
 
         if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
             empty_expansions = set()
@@ -191,9 +193,12 @@ class MyBot(sc2.BotAI):
         if QUEEN in self.production_order or self.should_expand():
             return
         for u in self.production_order:
-            lv = self.units(LARVA)
-            if lv.exists and self.can_afford(u):
-                await self.do(lv.first.train(u))
+            await self.train(u)
+
+    async def train(self, u):
+        lv = self.units(LARVA)
+        if lv.exists and self.can_afford(u):
+            await self.do(lv.first.train(u))
 
     async def call_every(self, func, seconds):
         if func.__name__ not in self.time_table:
