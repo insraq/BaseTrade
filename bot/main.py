@@ -14,15 +14,15 @@ class MyBot(sc2.BotAI):
 
     def __init__(self):
         self.last_scout_time = 0
-        self.army_overlord_tag = 0
+        self.last_overseer_time = 0
         self.resource_list: List[List] = None
         self.expansion_locs = {}
         self.hq: Unit = None
         self.build_order = [
             SPAWNINGPOOL,
             # ROACHWARREN,
-            EVOLUTIONCHAMBER,
             HYDRALISKDEN,
+            EVOLUTIONCHAMBER,
             # SPIRE,
         ]
         self.production_order = []
@@ -34,7 +34,7 @@ class MyBot(sc2.BotAI):
 
     async def on_step(self, iteration):
         larvae = self.units(LARVA)
-        forces = self.units(ZERGLING) | self.units(HYDRALISK) | self.units(ROACH) | self.units(MUTALISK)
+        forces = self.units(ZERGLING) | self.units(HYDRALISK) | self.units(ROACH) | self.units(MUTALISK) | self.units(OVERSEER)
 
         self.production_order = []
         self.calc_resource_list()
@@ -77,11 +77,6 @@ class MyBot(sc2.BotAI):
                 if AbilityId.EFFECT_INJECTLARVA in abilities:
                     await self.do(queen(EFFECT_INJECTLARVA, t))
 
-        army_overlord = self.units(OVERLORD).find_by_tag(self.army_overlord_tag)
-        if army_overlord is None:
-            army_overlord = self.units(OVERLORD).random
-            self.army_overlord_tag = army_overlord.tag
-
         t = self.nearby_enemies()
         actions = []
         if t is not None:
@@ -89,14 +84,12 @@ class MyBot(sc2.BotAI):
                 actions.append(unit.attack(t.position))
         elif self.supply_used > 190:
             target = self.select_target()
-            actions.append(army_overlord.move(target))
             for unit in forces:
                 unit: Unit = unit
                 if not unit.is_attacking:
                     actions.append(unit.attack(target))
         else:
             far_h = self.townhalls.furthest_to(self.start_location)
-            actions.append(army_overlord.move(far_h.position.random_on_distance(5)))
             for unit in forces.further_than(10, far_h.position):
                 if not unit.is_moving:
                     actions.append(unit.move(far_h.position.random_on_distance(5)))
@@ -105,8 +98,8 @@ class MyBot(sc2.BotAI):
         if not self.units(LAIR).exists and self.already_pending(LAIR) == 0 and self.can_afford(LAIR):
             await self.do(self.hq.build(LAIR))
 
-        if not self.units(HIVE).exists and self.already_pending(HIVE) == 0 and self.can_afford(HIVE):
-            await self.do(self.hq.build(HIVE))
+        # if not self.units(HIVE).exists and self.already_pending(HIVE) == 0 and self.can_afford(HIVE):
+        #     await self.do(self.hq.build(HIVE))
 
         self.production_order.append(HYDRALISK)
 
@@ -129,6 +122,10 @@ class MyBot(sc2.BotAI):
         await self.upgrade_building()
         await self.produce_unit()
 
+        if self.units(LAIR).exists and self.units(OVERSEER).amount == 0 and self.time - self.last_overseer_time > 20 and self.can_afford(OVERSEER):
+            self.last_overseer_time = self.time
+            await self.do(self.units(OVERLORD).random(MORPH_OVERSEER))
+
         if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
             empty_expansions = set()
             for loc in self.expansion_locs:
@@ -150,7 +147,7 @@ class MyBot(sc2.BotAI):
             target = self.state.vespene_geyser.closest_to(drone.position)
             await self.do(drone.build(EXTRACTOR, target))
 
-        if self.supply_used > 150 and self.already_pending_upgrade(OVERLORDSPEED) == 0:
+        if self.supply_cap > 150 and self.already_pending_upgrade(OVERLORDSPEED) == 0:
             await self.do(self.hq.research(OVERLORDSPEED))
 
         for a in self.units(EXTRACTOR).ready:
@@ -201,6 +198,8 @@ class MyBot(sc2.BotAI):
             return None
 
     def should_build_extractor(self):
+        if self.already_pending(EXTRACTOR) > 0:
+            return False
         if self.townhalls.amount < 5:
             return self.units(EXTRACTOR).amount < self.townhalls.amount * 2 - 2
         else:
