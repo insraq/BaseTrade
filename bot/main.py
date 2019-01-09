@@ -20,6 +20,7 @@ class MyBot(sc2.BotAI):
         self.expansion_locs = {}
         self.time_table = {}
         self.hq: Unit = None
+        self.all_in = False
         self.build_order = [
             SPAWNINGPOOL,
             # ROACHWARREN,
@@ -61,7 +62,13 @@ class MyBot(sc2.BotAI):
             for u in self.units:
                 u: Unit = u
                 await self.do(u.attack(self.enemy_start_locations[0]))
+                self.all_in = True
             return
+        elif self.all_in:
+            self.all_in = False
+            for u in self.units:
+                u: Unit = u
+                await self.do(u.stop())
 
         if self.townhalls.amount <= 0:
             for unit in self.units(DRONE) | self.units(QUEEN) | forces:
@@ -84,7 +91,8 @@ class MyBot(sc2.BotAI):
                 await self.do(t.train(QUEEN))
                 self.production_order.append(QUEEN)
 
-            if t.assigned_harvesters < t.ideal_harvesters and self.workers.amount + self.already_pending(DRONE) < 22 * 4:
+            if t.assigned_harvesters < t.ideal_harvesters and self.workers.amount + self.already_pending(
+                    DRONE) < 22 * 4:
                 self.production_order.append(DRONE)
 
             queen_nearby = self.units(QUEEN).idle.closer_than(10, t.position)
