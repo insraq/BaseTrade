@@ -112,12 +112,21 @@ class MyBot(sc2.BotAI):
             self.production_order.append(ZERGLING)
 
         await self.call_every(self.scout_expansions, 3 * 60)
+        await self.call_every(self.make_overseer, 20)
+        await self.call_every(self.scout_watchtower, 60)
+
+        # Counter rush strategy
+        enemy_nearby = self.known_enemy_units.closer_than(15, self.start_location)
+        if enemy_nearby.amount > 5 and self.time < 3 * 60:
+            if self.units(SPAWNINGPOOL).ready.exists:
+                self.production_order = [ZERGLING]
+            for u in self.units:
+                u: Unit = u
+                u.attack(enemy_nearby.random)
 
         await self.build_building()
         await self.upgrade_building()
         await self.produce_unit()
-
-        await self.call_every(self.make_overseer, 20)
 
         if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
             empty_expansions = set()
@@ -134,8 +143,6 @@ class MyBot(sc2.BotAI):
                 o.move(self.enemy_start_locations[0].towards(self.game_info.map_center, 20)),
                 o.move(self.game_info.map_center, queue=True)
             ])
-
-        await self.call_every(self.scout_watchtower, 60)
 
         if self.should_build_extractor():
             drone = self.workers.random
@@ -170,6 +177,8 @@ class MyBot(sc2.BotAI):
                     await self.do(u.first(abilities[0]))
 
     async def build_building(self):
+        if self.townhalls.amount < 2:
+            return
         for i, b in enumerate(self.build_order):
             if ((i == 0 or self.units(self.build_order[i - 1]).exists) and
                     not self.units(b).exists and
@@ -186,7 +195,6 @@ class MyBot(sc2.BotAI):
                 await self.do(lv.first.train(u))
 
     async def call_every(self, func, seconds):
-        print(self.time_table)
         if func.__name__ not in self.time_table:
             self.time_table[func.__name__] = 0
         if self.time - self.time_table[func.__name__] > seconds:
@@ -194,7 +202,8 @@ class MyBot(sc2.BotAI):
 
     async def scout_expansions(self):
         actions = []
-        scouts = (self.units(ZERGLING) | self.units(HYDRALISK))
+        scouts = (self.units(ZERGLING).tags_not_in(self.scout_units) |
+                  self.units(HYDRALISK).tags_not_in(self.scout_units))
         if scouts.exists:
             scout = scouts.random
             self.scout_units.add(scout.tag)
@@ -208,7 +217,8 @@ class MyBot(sc2.BotAI):
         if self.state.units(XELNAGATOWER).amount > 0:
             for x in self.state.units(XELNAGATOWER):
                 x: Unit = x
-                scouts = (self.units(ZERGLING) | self.units(HYDRALISK))
+                scouts = (self.units(ZERGLING).tags_not_in(self.scout_units) |
+                          self.units(HYDRALISK).tags_not_in(self.scout_units))
                 if not x.is_visible and scouts.exists:
                     scout = scouts.random
                     self.scout_units.add(scout.tag)
@@ -228,7 +238,7 @@ class MyBot(sc2.BotAI):
             return None
 
     def should_build_extractor(self):
-        if self.already_pending(EXTRACTOR) > 0:
+        if self.already_pending(EXTRACTOR) > 0 or not self.units(SPAWNINGPOOL).exists:
             return False
         if self.townhalls.amount < 5:
             return self.units(EXTRACTOR).amount < self.townhalls.amount * 2 - 2
@@ -246,9 +256,9 @@ class MyBot(sc2.BotAI):
     def should_expand(self):
         if self.minerals < 300 or self.already_pending(HATCHERY) > 0:
             return False
-        if self.units(SPAWNINGPOOL).exists and self.townhalls.amount < 2:
-            return True
-        if self.units(LAIR).exists and self.townhalls.amount < 3:
+        if self.townhalls.amount < 3:
+            return self.townhalls.amount < 3 if self.units(SPAWNINGPOOL).exists else self.townhalls.amount < 2
+        if self.units(LAIR).exists and self.townhalls.amount < 4:
             return True
         total_ideal_harvesters = 0
         for t in self.townhalls.ready:
