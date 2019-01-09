@@ -14,9 +14,11 @@ class MyBot(sc2.BotAI):
 
     def __init__(self):
         self.last_scout_time = 0
+        self.scout_units = set()
         self.last_overseer_time = 0
         self.resource_list: List[List] = None
         self.expansion_locs = {}
+        self.time_table = {}
         self.hq: Unit = None
         self.build_order = [
             SPAWNINGPOOL,
@@ -34,7 +36,10 @@ class MyBot(sc2.BotAI):
 
     async def on_step(self, iteration):
         larvae = self.units(LARVA)
-        forces = self.units(ZERGLING) | self.units(HYDRALISK) | self.units(ROACH) | self.units(MUTALISK) | self.units(OVERSEER)
+        forces = self.units(ZERGLING).tags_not_in(self.scout_units) | \
+                 self.units(HYDRALISK).tags_not_in(self.scout_units) | \
+                 self.units(ROACH) | self.units(MUTALISK) | \
+                 self.units(OVERSEER)
 
         self.production_order = []
         self.calc_resource_list()
@@ -106,25 +111,13 @@ class MyBot(sc2.BotAI):
         if self.units(ZERGLING).amount + self.already_pending(ZERGLING) < 7 or self.minerals - self.vespene > 500:
             self.production_order.append(ZERGLING)
 
-        if self.time - self.last_scout_time > 3 * 60:
-            if not self.units(ZERGLING).ready.exists:
-                self.production_order.insert(0, ZERGLING)
-                return
-            actions = []
-            scout = self.units(ZERGLING).random
-            locs = self.start_location.sort_by_distance(list(self.expansion_locs.keys()))
-            for p in locs:
-                actions.append(scout.move(p, queue=True))
-            await self.do_actions(actions)
-            self.last_scout_time = self.time
+        await self.call_every(self.scout_expansions, 3 * 60)
 
         await self.build_building()
         await self.upgrade_building()
         await self.produce_unit()
 
-        if self.units(LAIR).exists and self.units(OVERSEER).amount == 0 and self.time - self.last_overseer_time > 20 and self.can_afford(OVERSEER):
-            self.last_overseer_time = self.time
-            await self.do(self.units(OVERLORD).random(MORPH_OVERSEER))
+        await self.call_every(self.make_overseer, 20)
 
         if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
             empty_expansions = set()
@@ -141,6 +134,8 @@ class MyBot(sc2.BotAI):
                 o.move(self.enemy_start_locations[0].towards(self.game_info.map_center, 20)),
                 o.move(self.game_info.map_center, queue=True)
             ])
+
+        await self.call_every(self.scout_watchtower, 60)
 
         if self.should_build_extractor():
             drone = self.workers.random
@@ -190,6 +185,41 @@ class MyBot(sc2.BotAI):
             if lv.exists and self.can_afford(u):
                 await self.do(lv.first.train(u))
 
+    async def call_every(self, func, seconds):
+        print(self.time_table)
+        if func.__name__ not in self.time_table:
+            self.time_table[func.__name__] = 0
+        if self.time - self.time_table[func.__name__] > seconds:
+            await func()
+
+    async def scout_expansions(self):
+        actions = []
+        scouts = (self.units(ZERGLING) | self.units(HYDRALISK))
+        if scouts.exists:
+            scout = scouts.random
+            self.scout_units.add(scout.tag)
+            locs = self.start_location.sort_by_distance(list(self.expansion_locs.keys()))
+            for p in locs:
+                actions.append(scout.move(p, queue=True))
+            await self.do_actions(actions)
+            self.time_table["scout_expansions"] = self.time
+
+    async def scout_watchtower(self):
+        if self.state.units(XELNAGATOWER).amount > 0:
+            for x in self.state.units(XELNAGATOWER):
+                x: Unit = x
+                scouts = (self.units(ZERGLING) | self.units(HYDRALISK))
+                if not x.is_visible and scouts.exists:
+                    scout = scouts.random
+                    self.scout_units.add(scout.tag)
+                    await self.do(scout.move(x.position))
+                    self.time_table["scout_watchtower"] = self.time
+
+    async def make_overseer(self):
+        if self.units(LAIR).exists and self.units(OVERSEER).amount == 0 and self.can_afford(OVERSEER):
+            await self.do(self.units(OVERLORD).random(MORPH_OVERSEER))
+            self.time_table["make_overseer"] = self.time
+
     def need_worker_mineral(self):
         t = self.townhalls.ready.filter(lambda a: a.assigned_harvesters < a.ideal_harvesters)
         if t.exists:
@@ -206,10 +236,10 @@ class MyBot(sc2.BotAI):
             return self.units(EXTRACTOR).amount < self.townhalls.amount * 2
 
     def nearby_enemies(self):
-        for t in self.townhalls:
+        for t in self.units.structure:
             t: Unit = t
             threats = self.known_enemy_units.closer_than(10, t.position)
-            if threats.amount > 5:
+            if threats.amount > 3:
                 return threats.random
         return None
 
