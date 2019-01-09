@@ -115,18 +115,15 @@ class MyBot(sc2.BotAI):
         await self.call_every(self.make_overseer, 20)
         await self.call_every(self.scout_watchtower, 60)
 
-        # Counter rush strategy
         enemy_nearby = self.known_enemy_units.closer_than(15, self.start_location)
-        if enemy_nearby.amount > 5 and self.time < 3 * 60:
+        if enemy_nearby.amount > 5:
             if self.units(SPAWNINGPOOL).ready.exists:
                 self.production_order = [ZERGLING]
+            if self.units(HYDRALISKDEN).ready.exists:
+                self.production_order = [HYDRALISK]
             for u in self.units:
                 u: Unit = u
                 u.attack(enemy_nearby.random)
-
-        await self.build_building()
-        await self.upgrade_building()
-        await self.produce_unit()
 
         if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
             empty_expansions = set()
@@ -163,6 +160,10 @@ class MyBot(sc2.BotAI):
             mf = self.state.mineral_field.closest_to(d.position)
             await self.do(d.gather(mf))
 
+        await self.build_building()
+        await self.upgrade_building()
+        await self.produce_unit()
+
     def economy_first(self):
         return self.townhalls.amount < 3 or self.units(QUEEN).amount < 3 or self.units(DRONE).amount < 44
 
@@ -187,7 +188,7 @@ class MyBot(sc2.BotAI):
                 await self.build(b, near=self.hq.position.towards(self.game_info.map_center, 10))
 
     async def produce_unit(self):
-        if QUEEN in self.production_order:
+        if QUEEN in self.production_order or self.should_expand():
             return
         for u in self.production_order:
             lv = self.units(LARVA)
@@ -241,9 +242,9 @@ class MyBot(sc2.BotAI):
         if self.already_pending(EXTRACTOR) > 0 or not self.units(SPAWNINGPOOL).exists:
             return False
         if self.townhalls.amount < 5:
-            return self.units(EXTRACTOR).amount < self.townhalls.amount * 2 - 2
+            return self.units(EXTRACTOR).amount < self.townhalls.ready.amount * 2 - 2
         else:
-            return self.units(EXTRACTOR).amount < self.townhalls.amount * 2
+            return self.units(EXTRACTOR).amount < self.townhalls.ready.amount * 2
 
     def nearby_enemies(self):
         for t in self.units.structure:
@@ -254,12 +255,10 @@ class MyBot(sc2.BotAI):
         return None
 
     def should_expand(self):
-        if self.minerals < 300 or self.already_pending(HATCHERY) > 0:
+        if self.already_pending(HATCHERY) > 0:
             return False
-        if self.townhalls.amount < 3:
-            return self.townhalls.amount < 3 if self.units(SPAWNINGPOOL).exists else self.townhalls.amount < 2
-        if self.units(LAIR).exists and self.townhalls.amount < 4:
-            return True
+        if not self.units(SPAWNINGPOOL).exists or not self.units(HYDRALISKDEN).exists:
+            return self.townhalls.amount <= 1
         total_ideal_harvesters = 0
         for t in self.townhalls.ready:
             t: Unit = t
