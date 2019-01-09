@@ -123,7 +123,7 @@ class MyBot(sc2.BotAI):
         if self.units(ZERGLING).amount + self.already_pending(ZERGLING) < 7 or self.minerals - self.vespene > 500:
             self.production_order.append(ZERGLING)
 
-        await self.call_every(self.scout_expansions, 3 * 60)
+        await self.call_every(self.scout_expansions, 2 * 60)
         await self.call_every(self.make_overseer, 20)
         await self.call_every(self.scout_watchtower, 60)
 
