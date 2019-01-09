@@ -84,7 +84,7 @@ class MyBot(sc2.BotAI):
                 await self.do(t.train(QUEEN))
                 self.production_order.append(QUEEN)
 
-            if t.assigned_harvesters < t.ideal_harvesters:
+            if t.assigned_harvesters < t.ideal_harvesters and self.workers.amount + self.already_pending(DRONE) < 22 * 4:
                 self.production_order.append(DRONE)
 
             queen_nearby = self.units(QUEEN).idle.closer_than(10, t.position)
@@ -215,7 +215,8 @@ class MyBot(sc2.BotAI):
             self.scout_units.add(scout.tag)
             locs = self.start_location.sort_by_distance(list(self.expansion_locs.keys()))
             for p in locs:
-                actions.append(scout.move(p, queue=True))
+                if not self.is_visible(p):
+                    actions.append(scout.move(p, queue=True))
             await self.do_actions(actions)
             self.time_table["scout_expansions"] = self.time
 
