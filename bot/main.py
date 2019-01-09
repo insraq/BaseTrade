@@ -77,6 +77,11 @@ class MyBot(sc2.BotAI):
                 if AbilityId.EFFECT_INJECTLARVA in abilities:
                     await self.do(queen(EFFECT_INJECTLARVA, t))
 
+        army_overlord = self.units(OVERLORD).find_by_tag(self.army_overlord_tag)
+        if army_overlord is None:
+            army_overlord = self.units(OVERLORD).random
+            self.army_overlord_tag = army_overlord.tag
+
         t = self.nearby_enemies()
         actions = []
         if t is not None:
@@ -84,21 +89,14 @@ class MyBot(sc2.BotAI):
                 actions.append(unit.attack(t.position))
         elif self.supply_used > 190:
             target = self.select_target()
-
-            army_overlord = self.units(OVERLORD).find_by_tag(self.army_overlord_tag)
-            if army_overlord is None:
-                army_overlord = self.units(OVERLORD).random
-                self.army_overlord_tag = army_overlord.tag
-            actions.append(
-                army_overlord.move(target)
-            )
-
+            actions.append(army_overlord.move(target))
             for unit in forces:
                 unit: Unit = unit
                 if not unit.is_attacking:
                     actions.append(unit.attack(target))
         else:
             far_h = self.townhalls.furthest_to(self.start_location)
+            actions.append(army_overlord.move(far_h.position.random_on_distance(5)))
             for unit in forces.further_than(10, far_h.position):
                 if not unit.is_moving:
                     actions.append(unit.move(far_h.position.random_on_distance(5)))
@@ -112,8 +110,20 @@ class MyBot(sc2.BotAI):
 
         self.production_order.append(HYDRALISK)
 
-        if self.minerals - self.vespene > 500:
+        if self.units(ZERGLING).amount < 7 or self.minerals - self.vespene > 500:
             self.production_order.append(ZERGLING)
+
+        if self.time - self.last_scout_time > 4 * 60:
+            if not self.units(ZERGLING).ready.exists:
+                self.production_order.insert(0, ZERGLING)
+                return
+            actions = []
+            scout = self.units(ZERGLING).random
+            locs = self.start_location.sort_by_distance(list(self.expansion_locs.keys()))
+            for p in locs:
+                actions.append(scout.move(p, queue=True))
+            await self.do_actions(actions)
+            self.last_scout_time = self.time
 
         await self.build_building()
         await self.upgrade_building()
