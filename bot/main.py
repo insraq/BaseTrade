@@ -110,10 +110,10 @@ class MyBot(sc2.BotAI):
 
         self.production_order.append(HYDRALISK)
 
-        if self.units(ZERGLING).amount < 7 or self.minerals - self.vespene > 500:
+        if self.units(ZERGLING).amount + self.already_pending(ZERGLING) < 7 or self.minerals - self.vespene > 500:
             self.production_order.append(ZERGLING)
 
-        if self.time - self.last_scout_time > 4 * 60:
+        if self.time - self.last_scout_time > 3 * 60:
             if not self.units(ZERGLING).ready.exists:
                 self.production_order.insert(0, ZERGLING)
                 return
@@ -150,6 +150,9 @@ class MyBot(sc2.BotAI):
             target = self.state.vespene_geyser.closest_to(drone.position)
             await self.do(drone.build(EXTRACTOR, target))
 
+        if self.supply_used > 150 and self.already_pending_upgrade(OVERLORDSPEED) == 0:
+            await self.do(self.hq.research(OVERLORDSPEED))
+
         for a in self.units(EXTRACTOR).ready:
             if a.assigned_harvesters < a.ideal_harvesters:
                 w = self.workers.closer_than(20, a)
@@ -185,10 +188,10 @@ class MyBot(sc2.BotAI):
     async def produce_unit(self):
         if QUEEN in self.production_order:
             return
-        for l in self.units(LARVA):
-            for u in self.production_order:
-                if self.can_afford(u):
-                    await self.do(l.train(u))
+        for u in self.production_order:
+            lv = self.units(LARVA)
+            if lv.exists and self.can_afford(u):
+                await self.do(lv.first.train(u))
 
     def need_worker_mineral(self):
         t = self.townhalls.ready.filter(lambda a: a.assigned_harvesters < a.ideal_harvesters)
@@ -207,7 +210,7 @@ class MyBot(sc2.BotAI):
         for t in self.townhalls:
             t: Unit = t
             threats = self.known_enemy_units.closer_than(10, t.position)
-            if threats.amount > 10:
+            if threats.amount > 5:
                 return threats.random
         return None
 
