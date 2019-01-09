@@ -60,7 +60,7 @@ class MyBot(sc2.BotAI):
                 await self.train(HYDRALISK)
             for u in self.units:
                 u: Unit = u
-                u.attack(enemy_nearby.random)
+                await self.do(u.attack(enemy_nearby.random))
             return
 
         if self.townhalls.amount <= 0:
