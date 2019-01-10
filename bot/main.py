@@ -56,13 +56,10 @@ class MyBot(sc2.BotAI):
                 return
 
         # defend strategy
-        enemy_units_nearby = self.known_enemy_units.exclude_type(
-            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(15, self.start_location)
-        enemy_workers_nearby = self.known_enemy_units.of_type(
-            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(15, self.start_location)
-        if (enemy_units_nearby.exists or enemy_workers_nearby.amount > 1) and \
+        enemy_nearby = self.known_enemy_units.filter(lambda e: e.is_attacking).closer_than(15, self.start_location)
+        if enemy_nearby.exists and \
                 self.units.of_type({UnitTypeId.ZERGLING, UnitTypeId.HYDRALISK,
-                                    UnitTypeId.ROACH}).amount < enemy_units_nearby.amount + enemy_workers_nearby.amount:
+                                    UnitTypeId.ROACH}).amount < enemy_nearby.amount:
             if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
                 await self.train(UnitTypeId.HYDRALISK)
             elif self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
@@ -70,7 +67,7 @@ class MyBot(sc2.BotAI):
             for u in self.units.of_type({UnitTypeId.DRONE, UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING}):
                 u: Unit = u
                 if not u.is_attacking:
-                    await self.do(u.attack((enemy_units_nearby | enemy_workers_nearby).random))
+                    await self.do(u.attack(enemy_nearby.random))
             self.all_in = True
             return
         elif self.all_in:
