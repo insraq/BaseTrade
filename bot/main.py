@@ -173,7 +173,7 @@ class MyBot(sc2.BotAI):
                     if ct.distance2_to(self.start_location) > t.distance2_to(self.start_location):
                         t = ct
                 if t.position.distance_to_closest(exp_points) > 5 and self.has_creep(
-                        t) and not creep_tumors.closer_than(10, t).exists:
+                        t) and not creep_tumors.closer_than(8, t).exists:
                     await self.do(creep_queen(AbilityId.BUILD_CREEPTUMOR_QUEEN, t))
 
         for u in self.units(UnitTypeId.CREEPTUMORBURROWED).tags_not_in(self.used_creep_tumor):
@@ -181,7 +181,7 @@ class MyBot(sc2.BotAI):
             abilities = await self.get_available_abilities(u)
             if AbilityId.BUILD_CREEPTUMOR_TUMOR in abilities:
                 t = u.position.random_on_distance(10)
-                if not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5:
+                if not creep_tumors.closer_than(8, t).exists and t.position.distance_to_closest(exp_points) > 5:
                     err = await self.do(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
                     if not err:
                         self.used_creep_tumor.add(u.tag)
@@ -249,7 +249,7 @@ class MyBot(sc2.BotAI):
                     not self.units(b).exists and
                     self.already_pending(b) == 0 and
                     self.can_afford(b)):
-                await self.build(b, near=self.hq.position.towards(self.game_info.map_center, 10))
+                await self.build(b, near=self.hq.position.random_on_distance(10))
 
     async def produce_unit(self):
         if UnitTypeId.QUEEN in self.production_order or self.should_expand() or self.supply_left == 0:
@@ -330,7 +330,7 @@ class MyBot(sc2.BotAI):
     def should_expand(self):
         if self.already_pending(UnitTypeId.HATCHERY) > 0:
             return False
-        if not self.units(UnitTypeId.SPAWNINGPOOL).exists or not self.units(UnitTypeId.HYDRALISKDEN).exists:
+        if not (self.already_pending(UnitTypeId.LAIR, all_units=True) > 0 or self.units(UnitTypeId.LAIR).exists):
             return self.townhalls.amount <= 1
         total_ideal_harvesters = 0
         for t in self.townhalls.ready:
