@@ -69,8 +69,9 @@ class MyBot(sc2.BotAI):
                 await self.train(UnitTypeId.ZERGLING)
             for u in self.units.of_type({UnitTypeId.DRONE, UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING}):
                 u: Unit = u
-                await self.do(u.attack(self.enemy_start_locations[0]))
-                self.all_in = True
+                if not u.is_attacking:
+                    await self.do(u.attack((enemy_units_nearby | enemy_workers_nearby).random))
+            self.all_in = True
             return
         elif self.all_in:
             self.all_in = False
