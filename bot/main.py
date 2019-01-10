@@ -53,8 +53,8 @@ class MyBot(sc2.BotAI):
                 return
 
         # defend strategy
-        enemy_nearby = self.known_enemy_units.closer_than(15, self.start_location)
-        if enemy_nearby.amount > 4:
+        enemy_nearby = self.known_enemy_units.filter(lambda e: e.is_attacking).closer_than(15, self.start_location)
+        if enemy_nearby.exists and self.units.of_type({ZERGLING, HYDRALISK, ROACH}).amount < enemy_nearby.amount:
             if self.units(SPAWNINGPOOL).ready.exists:
                 await self.train(ZERGLING)
             if self.units(HYDRALISKDEN).ready.exists:
@@ -263,7 +263,7 @@ class MyBot(sc2.BotAI):
     def nearby_enemies(self):
         for t in self.units.structure:
             t: Unit = t
-            threats = self.known_enemy_units.closer_than(10, t.position)
+            threats = self.known_enemy_units.filter(lambda u: u.is_attacking).closer_than(10, t.position)
             if threats.exists:
                 return threats.random
         return None
