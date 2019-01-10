@@ -325,7 +325,7 @@ class MyBot(sc2.BotAI):
             return None
 
     def should_build_extractor(self):
-        if self.vespene - self.minerals > 500:
+        if self.vespene - self.minerals > 100:
             return False
         if self.already_pending(UnitTypeId.EXTRACTOR) > 0 or not self.units(UnitTypeId.SPAWNINGPOOL).exists:
             return False
