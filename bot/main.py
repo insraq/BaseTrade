@@ -56,9 +56,9 @@ class MyBot(sc2.BotAI):
         enemy_nearby = self.known_enemy_units.closer_than(15, self.start_location)
         if enemy_nearby.exists and self.units.of_type({ZERGLING, HYDRALISK, ROACH}).amount < enemy_nearby.amount:
             if self.units(SPAWNINGPOOL).ready.exists:
-                await self.train(ZERGLING)
+                await self.do(self.train(ZERGLING))
             if self.units(HYDRALISKDEN).ready.exists:
-                await self.train(HYDRALISK)
+                await self.do(self.train(HYDRALISK))
             for u in self.units:
                 u: Unit = u
                 await self.do(u.attack(self.enemy_start_locations[0]))
