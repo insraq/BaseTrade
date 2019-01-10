@@ -49,8 +49,11 @@ class MyBot(sc2.BotAI):
         self.calc_expansion_loc()
 
         # supply_cap does not include overload that is being built
+        buffer = 2
+        if self.units(UnitTypeId.OVERLORD).amount <= 1:
+            buffer = 1
         if (self.units(UnitTypeId.OVERLORD).amount + self.already_pending(
-                UnitTypeId.OVERLORD)) * 8 - self.supply_used < 2:
+                UnitTypeId.OVERLORD)) * 8 - self.supply_used < buffer:
             if self.can_afford(UnitTypeId.OVERLORD) and larvae.exists:
                 await self.do(larvae.random.train(UnitTypeId.OVERLORD))
                 return
@@ -114,6 +117,7 @@ class MyBot(sc2.BotAI):
 
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
                 UnitTypeId.QUEEN not in self.production_order and \
+                self.townhalls.amount >= 3 and \
                 self.units(UnitTypeId.QUEEN).amount + self.already_pending(UnitTypeId.QUEEN,
                                                                            all_units=True) <= self.townhalls.ready.amount:
             await self.do(self.townhalls.ready.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
@@ -137,25 +141,25 @@ class MyBot(sc2.BotAI):
                     actions.append(unit.move(far_h.position.random_on_distance(5)))
         await self.do_actions(actions)
 
+        self.production_order.append(UnitTypeId.HYDRALISK)
+
+        zergling_amount = self.units(UnitTypeId.ZERGLING).amount + self.already_pending(UnitTypeId.ZERGLING)
+        if zergling_amount < 9 or \
+                self.minerals - self.vespene > 500 or \
+                (self.already_pending_upgrade(UpgradeId.ZERGLINGATTACKSPEED) == 1 and zergling_amount < 40):
+            self.production_order.append(UnitTypeId.ZERGLING)
+
         if not self.units(UnitTypeId.LAIR).exists and \
-                self.already_pending(UnitTypeId.LAIR) == 0 and \
+                self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
                 self.can_afford(UnitTypeId.LAIR):
             await self.do(self.hq.build(UnitTypeId.LAIR))
 
         if not self.units(UnitTypeId.HIVE).exists and \
-                self.already_pending(UnitTypeId.HIVE) == 0 and \
-                self.units(UnitTypeId.INFESTATIONPIT).ready.exists and \
-                self.can_afford(UnitTypeId.HIVE):
+                self.already_pending(UnitTypeId.HIVE, all_units=True) == 0 and \
+                self.units(UnitTypeId.INFESTATIONPIT).ready.exists:
+            self.production_order = []
             await self.do(self.hq.build(UnitTypeId.HIVE))
-
-        self.production_order.append(UnitTypeId.HYDRALISK)
-
-        zergling_amount = self.units(UnitTypeId.ZERGLING).amount + self.already_pending(UnitTypeId.ZERGLING)
-        if zergling_amount < 7 or \
-                self.minerals - self.vespene > 500 or \
-                (self.already_pending_upgrade(UpgradeId.ZERGLINGATTACKSPEED) == 1 and zergling_amount < 40):
-            self.production_order.append(UnitTypeId.ZERGLING)
 
         await self.call_every(self.scout_expansions, 2 * 60)
         await self.call_every(self.make_overseer, 20)
@@ -252,7 +256,8 @@ class MyBot(sc2.BotAI):
         for i, b in enumerate(self.build_order):
             if (i == 0 or self.units(self.build_order[i - 1]).exists) and self.should_build(b):
                 await self.build(b, near=self.hq.position.random_on_distance(10))
-        if self.should_build(UnitTypeId.INFESTATIONPIT) and self.supply_used > 190:
+        if self.should_build(UnitTypeId.INFESTATIONPIT) and self.supply_used > 150:
+            self.production_order = []
             await self.build(UnitTypeId.INFESTATIONPIT, near=self.hq.position.random_on_distance(10))
 
     def should_build(self, b):
@@ -275,12 +280,17 @@ class MyBot(sc2.BotAI):
         if self.time - self.time_table[func.__name__] > seconds:
             await func()
 
+    def potential_scout_units(self):
+        scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
+        if not scouts.exists:
+            scouts = self.units(UnitTypeId.HYDRALISK).tags_not_in(self.scout_units)
+        return scouts
+
     async def scout_expansions(self):
         actions = []
-        scouts = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units) |
-                  self.units(UnitTypeId.HYDRALISK).tags_not_in(self.scout_units))
-        if scouts.exists:
-            scout = scouts.random
+        s = self.potential_scout_units()
+        if s.exists:
+            scout = s.random
             self.scout_units.add(scout.tag)
             locs = self.start_location.sort_by_distance(list(self.expansion_locs.keys()))
             for p in locs:
@@ -293,10 +303,9 @@ class MyBot(sc2.BotAI):
         if self.state.units(UnitTypeId.XELNAGATOWER).amount > 0:
             for x in self.state.units(UnitTypeId.XELNAGATOWER):
                 x: Unit = x
-                scouts = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units) |
-                          self.units(UnitTypeId.HYDRALISK).tags_not_in(self.scout_units))
-                if not x.is_visible and scouts.exists:
-                    scout = scouts.random
+                s = self.potential_scout_units()
+                if not x.is_visible and s.exists:
+                    scout = s.random
                     self.scout_units.add(scout.tag)
                     await self.do(scout.move(x.position))
                     self.time_table["scout_watchtower"] = self.time
