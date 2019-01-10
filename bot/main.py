@@ -21,6 +21,7 @@ class MyBot(sc2.BotAI):
         self.expansion_locs = {}
         self.time_table = {}
         self.creep_queen_tag = 0
+        self.used_creep_tumor = set()
         self.hq: Unit = None
         self.all_in = False
         self.build_order = [
@@ -57,9 +58,9 @@ class MyBot(sc2.BotAI):
 
         # defend strategy
         enemy_units_nearby = self.known_enemy_units.exclude_type(
-            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(15, self.start_location)
+            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(10, self.start_location)
         enemy_workers_nearby = self.known_enemy_units.of_type(
-            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(15, self.start_location)
+            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(10, self.start_location)
         if (enemy_units_nearby.exists or enemy_workers_nearby.exists) and \
                 self.units.of_type({UnitTypeId.ZERGLING, UnitTypeId.HYDRALISK,
                                     UnitTypeId.ROACH}).amount < enemy_units_nearby.amount + enemy_workers_nearby.amount:
@@ -116,7 +117,7 @@ class MyBot(sc2.BotAI):
                 UnitTypeId.QUEEN not in self.production_order and \
                 self.units(UnitTypeId.QUEEN).amount + self.already_pending(UnitTypeId.QUEEN,
                                                                            all_units=True) <= self.townhalls.ready.amount:
-            await self.do(self.townhalls.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
+            await self.do(self.townhalls.ready.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
             self.production_order.append(UnitTypeId.QUEEN)
 
         t = self.nearby_enemies()
@@ -171,16 +172,19 @@ class MyBot(sc2.BotAI):
                     ct = creep_tumors.furthest_to(self.start_location).position.random_on_distance(10)
                     if ct.distance2_to(self.start_location) > t.distance2_to(self.start_location):
                         t = ct
-                if t.position.distance_to_closest(exp_points) > 5 and self.has_creep(t):
+                if t.position.distance_to_closest(exp_points) > 5 and self.has_creep(
+                        t) and not creep_tumors.closer_than(10, t).exists:
                     await self.do(creep_queen(AbilityId.BUILD_CREEPTUMOR_QUEEN, t))
 
-        for u in self.units(UnitTypeId.CREEPTUMORBURROWED):
+        for u in self.units(UnitTypeId.CREEPTUMORBURROWED).tags_not_in(self.used_creep_tumor):
             u: Unit = u
             abilities = await self.get_available_abilities(u)
             if AbilityId.BUILD_CREEPTUMOR_TUMOR in abilities:
                 t = u.position.random_on_distance(10)
                 if not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5:
-                    await self.do(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
+                    err = await self.do(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
+                    if not err:
+                        self.used_creep_tumor.add(u.tag)
 
         if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
             empty_expansions = set()
@@ -204,6 +208,7 @@ class MyBot(sc2.BotAI):
             await self.do(drone.build(UnitTypeId.EXTRACTOR, target))
 
         if self.supply_cap > 150 and self.already_pending_upgrade(UpgradeId.OVERLORDSPEED) == 0:
+            self.production_order = []
             await self.do(self.hq.research(UpgradeId.OVERLORDSPEED))
 
         for a in self.units(UnitTypeId.EXTRACTOR).ready:
@@ -247,7 +252,7 @@ class MyBot(sc2.BotAI):
                 await self.build(b, near=self.hq.position.towards(self.game_info.map_center, 10))
 
     async def produce_unit(self):
-        if UnitTypeId.QUEEN in self.production_order or self.should_expand():
+        if UnitTypeId.QUEEN in self.production_order or self.should_expand() or self.supply_left == 0:
             return
         for u in self.production_order:
             await self.train(u)
