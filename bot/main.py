@@ -13,19 +13,21 @@ class MyBot(sc2.BotAI):
         NAME = json.load(f)["name"]
 
     def __init__(self):
+        super().__init__()
         self.last_scout_time = 0
         self.scout_units = set()
         self.last_overseer_time = 0
         self.resource_list: List[List] = None
         self.expansion_locs = {}
         self.time_table = {}
+        self.creep_queen_tag = 0
         self.hq: Unit = None
         self.all_in = False
         self.build_order = [
-            SPAWNINGPOOL,
+            UnitTypeId.SPAWNINGPOOL,
             # ROACHWARREN,
-            HYDRALISKDEN,
-            EVOLUTIONCHAMBER,
+            UnitTypeId.HYDRALISKDEN,
+            UnitTypeId.EVOLUTIONCHAMBER,
             # SPIRE,
         ]
         self.production_order = []
@@ -36,44 +38,48 @@ class MyBot(sc2.BotAI):
         return self.enemy_start_locations[0]
 
     async def on_step(self, iteration):
-        larvae = self.units(LARVA)
-        forces = self.units(ZERGLING).tags_not_in(self.scout_units) | \
-                 self.units(HYDRALISK).tags_not_in(self.scout_units) | \
-                 self.units(ROACH) | self.units(MUTALISK) | \
-                 self.units(OVERSEER)
+        larvae = self.units(UnitTypeId.LARVA)
+        forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units) |
+                  self.units(UnitTypeId.HYDRALISK).tags_not_in(self.scout_units) |
+                  self.units(UnitTypeId.ROACH) | self.units(UnitTypeId.MUTALISK) |
+                  self.units(UnitTypeId.OVERSEER))
 
         self.production_order = []
         self.calc_resource_list()
         self.calc_expansion_loc()
 
         # supply_cap does not include overload that is being built
-        if (self.units(OVERLORD).amount + self.already_pending(OVERLORD)) * 8 - self.supply_used < 2:
-            if self.can_afford(OVERLORD) and larvae.exists:
-                await self.do(larvae.random.train(OVERLORD))
+        if (self.units(UnitTypeId.OVERLORD).amount + self.already_pending(
+                UnitTypeId.OVERLORD)) * 8 - self.supply_used < 2:
+            if self.can_afford(UnitTypeId.OVERLORD) and larvae.exists:
+                await self.do(larvae.random.train(UnitTypeId.OVERLORD))
                 return
 
         # defend strategy
-        enemy_units_nearby = self.known_enemy_units.exclude_type({DRONE, SCV, PROBE}).closer_than(15, self.start_location)
-        enemy_workers_nearby = self.known_enemy_units.of_type({DRONE, SCV, PROBE}).closer_than(15, self.start_location)
+        enemy_units_nearby = self.known_enemy_units.exclude_type(
+            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(15, self.start_location)
+        enemy_workers_nearby = self.known_enemy_units.of_type(
+            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(15, self.start_location)
         if (enemy_units_nearby.exists or enemy_workers_nearby.amount > 1) and \
-                self.units.of_type({ZERGLING, HYDRALISK, ROACH}).amount < enemy_units_nearby.amount + enemy_workers_nearby.amount:
-            if self.units(HYDRALISKDEN).ready.exists:
-                await self.train(HYDRALISK)
-            elif self.units(SPAWNINGPOOL).ready.exists:
-                await self.train(ZERGLING)
-            for u in self.units.exclude_type({OVERLORD, OVERSEER}):
+                self.units.of_type({UnitTypeId.ZERGLING, UnitTypeId.HYDRALISK,
+                                    UnitTypeId.ROACH}).amount < enemy_units_nearby.amount + enemy_workers_nearby.amount:
+            if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
+                await self.train(UnitTypeId.HYDRALISK)
+            elif self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
+                await self.train(UnitTypeId.ZERGLING)
+            for u in self.units.of_type({UnitTypeId.DRONE, UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING}):
                 u: Unit = u
                 await self.do(u.attack(self.enemy_start_locations[0]))
                 self.all_in = True
             return
         elif self.all_in:
             self.all_in = False
-            for u in self.units.exclude_type({OVERLORD, OVERSEER}):
+            for u in self.units.of_type({UnitTypeId.DRONE, UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING}):
                 u: Unit = u
                 await self.do(u.stop())
 
         if self.townhalls.amount <= 0:
-            for unit in self.units(DRONE) | self.units(QUEEN) | forces:
+            for unit in self.units(UnitTypeId.DRONE) | self.units(UnitTypeId.QUEEN) | forces:
                 await self.do(unit.attack(self.enemy_start_locations[0]))
             return
         else:
@@ -87,22 +93,30 @@ class MyBot(sc2.BotAI):
             if t.assigned_harvesters > t.ideal_harvesters and excess_worker.exists and m is not None:
                 await self.do(excess_worker.random.gather(m))
 
-            if (self.units(SPAWNINGPOOL).ready.exists and
-                    t.is_ready and t.noqueue and
-                    not self.units(QUEEN).closer_than(10, t.position).exists):
-                await self.do(t.train(QUEEN))
-                self.production_order.append(QUEEN)
+            if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and t.is_ready and t.noqueue:
+                if self.units(UnitTypeId.QUEEN).closer_than(10, t.position).amount == 0:
+                    await self.do(t.train(UnitTypeId.QUEEN))
+                    self.production_order.append(UnitTypeId.QUEEN)
 
             if t.assigned_harvesters < t.ideal_harvesters and self.workers.amount + self.already_pending(
-                    DRONE) < 22 * 4:
-                self.production_order.append(DRONE)
+                    UnitTypeId.DRONE) < 22 * 4:
+                self.production_order.append(UnitTypeId.DRONE)
 
-            queen_nearby = self.units(QUEEN).idle.closer_than(10, t.position)
-            if queen_nearby.exists:
-                queen = queen_nearby.first
+            queen_nearby = self.units(UnitTypeId.QUEEN).idle.closer_than(10, t.position)
+            if queen_nearby.tags_not_in({self.creep_queen_tag}).amount > 0:
+                queen = queen_nearby.tags_not_in({self.creep_queen_tag}).first
                 abilities = await self.get_available_abilities(queen)
                 if AbilityId.EFFECT_INJECTLARVA in abilities:
-                    await self.do(queen(EFFECT_INJECTLARVA, t))
+                    await self.do(queen(AbilityId.EFFECT_INJECTLARVA, t))
+            if self.units(UnitTypeId.QUEEN).find_by_tag(self.creep_queen_tag) is None and queen_nearby.amount > 1:
+                self.creep_queen_tag = queen_nearby[1].tag
+
+        if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
+                UnitTypeId.QUEEN not in self.production_order and \
+                self.units(UnitTypeId.QUEEN).amount + self.already_pending(UnitTypeId.QUEEN,
+                                                                           all_units=True) <= self.townhalls.ready.amount:
+            await self.do(self.townhalls.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
+            self.production_order.append(UnitTypeId.QUEEN)
 
         t = self.nearby_enemies()
         actions = []
@@ -122,20 +136,50 @@ class MyBot(sc2.BotAI):
                     actions.append(unit.move(far_h.position.random_on_distance(5)))
         await self.do_actions(actions)
 
-        if not self.units(LAIR).exists and self.already_pending(LAIR) == 0 and self.can_afford(LAIR):
-            await self.do(self.hq.build(LAIR))
+        if not self.units(UnitTypeId.LAIR).exists and \
+                self.already_pending(UnitTypeId.LAIR) == 0 and \
+                self.can_afford(UnitTypeId.LAIR):
+            await self.do(self.hq.build(UnitTypeId.LAIR))
 
         # if not self.units(HIVE).exists and self.already_pending(HIVE) == 0 and self.can_afford(HIVE):
         #     await self.do(self.hq.build(HIVE))
 
-        self.production_order.append(HYDRALISK)
+        self.production_order.append(UnitTypeId.HYDRALISK)
 
-        if self.units(ZERGLING).amount + self.already_pending(ZERGLING) < 7 or self.minerals - self.vespene > 500:
-            self.production_order.append(ZERGLING)
+        if self.units(UnitTypeId.ZERGLING).amount + self.already_pending(UnitTypeId.ZERGLING) < 7 or \
+                self.minerals - self.vespene > 500:
+            self.production_order.append(UnitTypeId.ZERGLING)
 
         await self.call_every(self.scout_expansions, 2 * 60)
         await self.call_every(self.make_overseer, 20)
         await self.call_every(self.scout_watchtower, 60)
+
+        creep_tumors = self.units.of_type({
+            UnitTypeId.CREEPTUMOR,
+            UnitTypeId.CREEPTUMORBURROWED,
+            UnitTypeId.CREEPTUMORMISSILE,
+            UnitTypeId.CREEPTUMORQUEEN,
+        })
+        exp_points = list(self.expansion_locs.keys())
+        creep_queen = self.units(UnitTypeId.QUEEN).find_by_tag(self.creep_queen_tag)
+        if creep_queen is not None and creep_queen.is_idle:
+            abilities = await self.get_available_abilities(creep_queen)
+            if AbilityId.BUILD_CREEPTUMOR_QUEEN in abilities:
+                t = self.townhalls.ready.furthest_to(self.start_location).position.random_on_distance(6)
+                if creep_tumors.exists:
+                    ct = creep_tumors.furthest_to(self.start_location).position.random_on_distance(10)
+                    if ct.distance2_to(self.start_location) > t.distance2_to(self.start_location):
+                        t = ct
+                if t.position.distance_to_closest(exp_points) > 5 and self.has_creep(t):
+                    await self.do(creep_queen(AbilityId.BUILD_CREEPTUMOR_QUEEN, t))
+
+        for u in self.units(UnitTypeId.CREEPTUMORBURROWED):
+            u: Unit = u
+            abilities = await self.get_available_abilities(u)
+            if AbilityId.BUILD_CREEPTUMOR_TUMOR in abilities:
+                t = u.position.random_on_distance(10)
+                if not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5:
+                    await self.do(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
 
         if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
             empty_expansions = set()
@@ -144,10 +188,10 @@ class MyBot(sc2.BotAI):
                 if self.townhalls.closer_than(self.EXPANSION_GAP_THRESHOLD, loc).amount == 0:
                     empty_expansions.add(loc)
             pos = self.start_location.closest(empty_expansions)
-            await self.do(self.workers.random.build(HATCHERY, pos))
+            await self.do(self.workers.random.build(UnitTypeId.HATCHERY, pos))
 
-        if self.units(OVERLORD).amount == 1:
-            o: Unit = self.units(OVERLORD).first
+        if self.units(UnitTypeId.OVERLORD).amount == 1:
+            o: Unit = self.units(UnitTypeId.OVERLORD).first
             await self.do_actions([
                 o.move(self.enemy_start_locations[0].towards(self.game_info.map_center, 20)),
                 o.move(self.game_info.map_center, queue=True)
@@ -156,18 +200,18 @@ class MyBot(sc2.BotAI):
         if self.should_build_extractor():
             drone = self.workers.random
             target = self.state.vespene_geyser.closest_to(drone.position)
-            await self.do(drone.build(EXTRACTOR, target))
+            await self.do(drone.build(UnitTypeId.EXTRACTOR, target))
 
-        if self.supply_cap > 150 and self.already_pending_upgrade(OVERLORDSPEED) == 0:
-            await self.do(self.hq.research(OVERLORDSPEED))
+        if self.supply_cap > 150 and self.already_pending_upgrade(UpgradeId.OVERLORDSPEED) == 0:
+            await self.do(self.hq.research(UpgradeId.OVERLORDSPEED))
 
-        for a in self.units(EXTRACTOR).ready:
+        for a in self.units(UnitTypeId.EXTRACTOR).ready:
             if a.assigned_harvesters < a.ideal_harvesters:
                 w = self.workers.closer_than(20, a)
                 if w.exists:
                     await self.do(w.random.gather(a))
 
-        for d in self.units(DRONE).idle:
+        for d in self.units(UnitTypeId.DRONE).idle:
             d: Unit = d
             mf = self.state.mineral_field.closest_to(d.position)
             await self.do(d.gather(mf))
@@ -177,7 +221,9 @@ class MyBot(sc2.BotAI):
         await self.produce_unit()
 
     def economy_first(self):
-        return self.townhalls.amount < 3 or self.units(QUEEN).amount < 3 or self.units(DRONE).amount < 44
+        return self.townhalls.amount < 3 or \
+               self.units(UnitTypeId.QUEEN).amount < 3 or \
+               self.units(UnitTypeId.DRONE).amount < 44
 
     async def upgrade_building(self):
         if self.economy_first():
@@ -200,13 +246,13 @@ class MyBot(sc2.BotAI):
                 await self.build(b, near=self.hq.position.towards(self.game_info.map_center, 10))
 
     async def produce_unit(self):
-        if QUEEN in self.production_order or self.should_expand():
+        if UnitTypeId.QUEEN in self.production_order or self.should_expand():
             return
         for u in self.production_order:
             await self.train(u)
 
     async def train(self, u):
-        lv = self.units(LARVA)
+        lv = self.units(UnitTypeId.LARVA)
         if lv.exists and self.can_afford(u):
             await self.do(lv.random.train(u))
 
@@ -218,8 +264,8 @@ class MyBot(sc2.BotAI):
 
     async def scout_expansions(self):
         actions = []
-        scouts = (self.units(ZERGLING).tags_not_in(self.scout_units) |
-                  self.units(HYDRALISK).tags_not_in(self.scout_units))
+        scouts = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units) |
+                  self.units(UnitTypeId.HYDRALISK).tags_not_in(self.scout_units))
         if scouts.exists:
             scout = scouts.random
             self.scout_units.add(scout.tag)
@@ -231,11 +277,11 @@ class MyBot(sc2.BotAI):
             self.time_table["scout_expansions"] = self.time
 
     async def scout_watchtower(self):
-        if self.state.units(XELNAGATOWER).amount > 0:
-            for x in self.state.units(XELNAGATOWER):
+        if self.state.units(UnitTypeId.XELNAGATOWER).amount > 0:
+            for x in self.state.units(UnitTypeId.XELNAGATOWER):
                 x: Unit = x
-                scouts = (self.units(ZERGLING).tags_not_in(self.scout_units) |
-                          self.units(HYDRALISK).tags_not_in(self.scout_units))
+                scouts = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units) |
+                          self.units(UnitTypeId.HYDRALISK).tags_not_in(self.scout_units))
                 if not x.is_visible and scouts.exists:
                     scout = scouts.random
                     self.scout_units.add(scout.tag)
@@ -243,8 +289,10 @@ class MyBot(sc2.BotAI):
                     self.time_table["scout_watchtower"] = self.time
 
     async def make_overseer(self):
-        if self.units(LAIR).exists and self.units(OVERSEER).amount == 0 and self.can_afford(OVERSEER):
-            await self.do(self.units(OVERLORD).random(MORPH_OVERSEER))
+        if self.units(UnitTypeId.LAIR).exists and \
+                self.units(UnitTypeId.OVERSEER).amount == 0 and \
+                self.can_afford(UnitTypeId.OVERSEER):
+            await self.do(self.units(UnitTypeId.OVERLORD).random(AbilityId.MORPH_OVERSEER))
             self.time_table["make_overseer"] = self.time
 
     def need_worker_mineral(self):
@@ -255,25 +303,28 @@ class MyBot(sc2.BotAI):
             return None
 
     def should_build_extractor(self):
-        if self.already_pending(EXTRACTOR) > 0 or not self.units(SPAWNINGPOOL).exists:
+        if self.already_pending(UnitTypeId.EXTRACTOR) > 0 or not self.units(UnitTypeId.SPAWNINGPOOL).exists:
             return False
         if self.townhalls.amount < 5:
-            return self.units(EXTRACTOR).amount < self.townhalls.ready.amount * 2 - 2
+            return self.units(UnitTypeId.EXTRACTOR).amount < self.townhalls.ready.amount * 2 - 2
         else:
-            return self.units(EXTRACTOR).amount < self.townhalls.ready.amount * 2
+            return self.units(UnitTypeId.EXTRACTOR).amount < self.townhalls.ready.amount * 2
 
     def nearby_enemies(self):
         for t in self.units.structure:
             t: Unit = t
-            threats = self.known_enemy_units.exclude_type({OVERLORD, OVERSEER, DRONE, SCV, PROBE}).closer_than(10, t.position)
+            threats = self.known_enemy_units \
+                .exclude_type({UnitTypeId.OVERLORD, UnitTypeId.OVERSEER, UnitTypeId.DRONE,
+                               UnitTypeId.SCV, UnitTypeId.PROBE}) \
+                .closer_than(10, t.position)
             if threats.exists:
                 return threats.random
         return None
 
     def should_expand(self):
-        if self.already_pending(HATCHERY) > 0:
+        if self.already_pending(UnitTypeId.HATCHERY) > 0:
             return False
-        if not self.units(SPAWNINGPOOL).exists or not self.units(HYDRALISKDEN).exists:
+        if not self.units(UnitTypeId.SPAWNINGPOOL).exists or not self.units(UnitTypeId.HYDRALISKDEN).exists:
             return self.townhalls.amount <= 1
         total_ideal_harvesters = 0
         for t in self.townhalls.ready:
