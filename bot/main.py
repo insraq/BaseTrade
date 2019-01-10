@@ -21,7 +21,6 @@ class MyBot(sc2.BotAI):
         self.expansion_locs = {}
         self.time_table = {}
         self.creep_queen_tag = 0
-        self.used_creep_tumor = set()
         self.hq: Unit = None
         self.all_in = False
         self.build_order = [
@@ -35,7 +34,7 @@ class MyBot(sc2.BotAI):
 
     def select_target(self):
         if self.known_enemy_structures.exists:
-            return self.known_enemy_structures.closest_to(self.start_location).position
+            return self.known_enemy_structures.furthest_to(self.enemy_start_locations[0]).position
         return self.enemy_start_locations[0]
 
     async def on_step(self, iteration):
@@ -140,16 +139,22 @@ class MyBot(sc2.BotAI):
 
         if not self.units(UnitTypeId.LAIR).exists and \
                 self.already_pending(UnitTypeId.LAIR) == 0 and \
+                self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
                 self.can_afford(UnitTypeId.LAIR):
             await self.do(self.hq.build(UnitTypeId.LAIR))
 
-        # if not self.units(HIVE).exists and self.already_pending(HIVE) == 0 and self.can_afford(HIVE):
-        #     await self.do(self.hq.build(HIVE))
+        if not self.units(UnitTypeId.HIVE).exists and \
+                self.already_pending(UnitTypeId.HIVE) == 0 and \
+                self.units(UnitTypeId.INFESTATIONPIT).ready.exists and \
+                self.can_afford(UnitTypeId.HIVE):
+            await self.do(self.hq.build(UnitTypeId.HIVE))
 
         self.production_order.append(UnitTypeId.HYDRALISK)
 
-        if self.units(UnitTypeId.ZERGLING).amount + self.already_pending(UnitTypeId.ZERGLING) < 7 or \
-                self.minerals - self.vespene > 500:
+        zergling_amount = self.units(UnitTypeId.ZERGLING).amount + self.already_pending(UnitTypeId.ZERGLING)
+        if zergling_amount < 7 or \
+                self.minerals - self.vespene > 500 or \
+                (self.already_pending_upgrade(UpgradeId.ZERGLINGATTACKSPEED) == 1 and zergling_amount < 40):
             self.production_order.append(UnitTypeId.ZERGLING)
 
         await self.call_every(self.scout_expansions, 2 * 60)
@@ -173,18 +178,18 @@ class MyBot(sc2.BotAI):
                     if ct.distance2_to(self.start_location) > t.distance2_to(self.start_location):
                         t = ct
                 if t.position.distance_to_closest(exp_points) > 5 and self.has_creep(
-                        t) and not creep_tumors.closer_than(8, t).exists:
+                        t) and not creep_tumors.closer_than(10, t).exists:
                     await self.do(creep_queen(AbilityId.BUILD_CREEPTUMOR_QUEEN, t))
 
-        for u in self.units(UnitTypeId.CREEPTUMORBURROWED).tags_not_in(self.used_creep_tumor):
+        actions = []
+        for u in self.units(UnitTypeId.CREEPTUMORBURROWED):
             u: Unit = u
             abilities = await self.get_available_abilities(u)
             if AbilityId.BUILD_CREEPTUMOR_TUMOR in abilities:
                 t = u.position.random_on_distance(10)
-                if not creep_tumors.closer_than(8, t).exists and t.position.distance_to_closest(exp_points) > 5:
-                    err = await self.do(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
-                    if not err:
-                        self.used_creep_tumor.add(u.tag)
+                if not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5:
+                    actions.append(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
+        await self.do_actions(actions)
 
         if self.should_expand() and self.resource_list is not None and len(self.resource_list) == 0:
             empty_expansions = set()
@@ -245,11 +250,13 @@ class MyBot(sc2.BotAI):
         if self.townhalls.amount < 2:
             return
         for i, b in enumerate(self.build_order):
-            if ((i == 0 or self.units(self.build_order[i - 1]).exists) and
-                    not self.units(b).exists and
-                    self.already_pending(b) == 0 and
-                    self.can_afford(b)):
+            if (i == 0 or self.units(self.build_order[i - 1]).exists) and self.should_build(b):
                 await self.build(b, near=self.hq.position.random_on_distance(10))
+        if self.should_build(UnitTypeId.INFESTATIONPIT) and self.supply_used > 190:
+            await self.build(UnitTypeId.INFESTATIONPIT, near=self.hq.position.random_on_distance(10))
+
+    def should_build(self, b):
+        return not self.units(b).exists and self.already_pending(b) == 0 and self.can_afford(b)
 
     async def produce_unit(self):
         if UnitTypeId.QUEEN in self.production_order or self.should_expand() or self.supply_left == 0:
@@ -309,6 +316,8 @@ class MyBot(sc2.BotAI):
             return None
 
     def should_build_extractor(self):
+        if self.vespene - self.minerals > 500:
+            return False
         if self.already_pending(UnitTypeId.EXTRACTOR) > 0 or not self.units(UnitTypeId.SPAWNINGPOOL).exists:
             return False
         if self.townhalls.amount < 5:
