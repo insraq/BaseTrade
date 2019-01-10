@@ -53,20 +53,22 @@ class MyBot(sc2.BotAI):
                 return
 
         # defend strategy
-        enemy_nearby = self.known_enemy_units.closer_than(15, self.start_location)
-        if enemy_nearby.exists and self.units.of_type({ZERGLING, HYDRALISK, ROACH}).amount < enemy_nearby.amount:
+        enemy_units_nearby = self.known_enemy_units.exclude_type({DRONE, SCV, PROBE}).closer_than(15, self.start_location)
+        enemy_workers_nearby = self.known_enemy_units.of_type({DRONE, SCV, PROBE}).closer_than(15, self.start_location)
+        if (enemy_units_nearby.exists or enemy_workers_nearby.amount > 1) and \
+                self.units.of_type({ZERGLING, HYDRALISK, ROACH}).amount < enemy_units_nearby.amount + enemy_workers_nearby.amount:
             if self.units(HYDRALISKDEN).ready.exists:
                 await self.train(HYDRALISK)
             elif self.units(SPAWNINGPOOL).ready.exists:
                 await self.train(ZERGLING)
-            for u in self.units:
+            for u in self.units.exclude_type({OVERLORD, OVERSEER}):
                 u: Unit = u
                 await self.do(u.attack(self.enemy_start_locations[0]))
                 self.all_in = True
             return
         elif self.all_in:
             self.all_in = False
-            for u in self.units:
+            for u in self.units.exclude_type({OVERLORD, OVERSEER}):
                 u: Unit = u
                 await self.do(u.stop())
 
