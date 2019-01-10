@@ -55,10 +55,10 @@ class MyBot(sc2.BotAI):
         # defend strategy
         enemy_nearby = self.known_enemy_units.closer_than(15, self.start_location)
         if enemy_nearby.exists and self.units.of_type({ZERGLING, HYDRALISK, ROACH}).amount < enemy_nearby.amount:
-            if self.units(SPAWNINGPOOL).ready.exists:
-                await self.do(self.train(ZERGLING))
             if self.units(HYDRALISKDEN).ready.exists:
-                await self.do(self.train(HYDRALISK))
+                await self.train(HYDRALISK)
+            elif self.units(SPAWNINGPOOL).ready.exists:
+                await self.train(ZERGLING)
             for u in self.units:
                 u: Unit = u
                 await self.do(u.attack(self.enemy_start_locations[0]))
@@ -206,7 +206,7 @@ class MyBot(sc2.BotAI):
     async def train(self, u):
         lv = self.units(LARVA)
         if lv.exists and self.can_afford(u):
-            await self.do(lv.first.train(u))
+            await self.do(lv.random.train(u))
 
     async def call_every(self, func, seconds):
         if func.__name__ not in self.time_table:
