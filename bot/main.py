@@ -53,7 +53,7 @@ class MyBot(sc2.BotAI):
         buffer = 2
         if self.units(UnitTypeId.OVERLORD).amount <= 1:
             buffer = 1
-        if (self.units(UnitTypeId.OVERLORD).amount + self.already_pending(
+        if (self.townhalls.ready.amount * 6 + self.units(UnitTypeId.OVERLORD).amount + self.already_pending(
                 UnitTypeId.OVERLORD)) * 8 - self.supply_used < buffer:
             if self.can_afford(UnitTypeId.OVERLORD) and larvae.exists:
                 await self.do(larvae.random.train(UnitTypeId.OVERLORD))
@@ -69,7 +69,8 @@ class MyBot(sc2.BotAI):
                 await self.train(UnitTypeId.HYDRALISK)
             elif self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
                 await self.train(UnitTypeId.ZERGLING)
-
+            else:
+                await self.train(UnitTypeId.DRONE)
             army = {UnitTypeId.DRONE, UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING}
             if self.units.of_type(
                     {UnitTypeId.ZERGLING, UnitTypeId.HYDRALISK, UnitTypeId.ROACH}).amount < self.last_enemy_count:
