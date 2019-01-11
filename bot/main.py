@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 from typing import List
 
@@ -6,6 +7,7 @@ import sc2
 from sc2.constants import *
 from sc2.position import Point2
 from sc2.unit import Unit
+from sc2.units import Units
 
 
 class MyBot(sc2.BotAI):
@@ -62,9 +64,10 @@ class MyBot(sc2.BotAI):
         # enemy info
         self.calc_enemy_info()
 
-        # counter double proxy
-
+        # counter timing attack
         if await self.defend_double_proxy():
+            return
+        if await self.defend_cannon_rush():
             return
 
         # general defend strategy
@@ -213,6 +216,10 @@ class MyBot(sc2.BotAI):
                 o.move(self.game_info.map_center, queue=True)
             ])
 
+        o: Units = self.units(UnitTypeId.OVERLORD).idle
+        if self.units(UnitTypeId.OVERLORD).amount == 2 and o.exists:
+            await self.do(o.first.move(self.start_location.towards(self.game_info.map_center, 10), queue=True))
+
         if self.should_build_extractor():
             drone = self.workers.random
             target = self.state.vespene_geyser.closest_to(drone.position)
@@ -277,62 +284,6 @@ class MyBot(sc2.BotAI):
 
     def should_build(self, b):
         return not self.units(b).exists and self.already_pending(b) == 0 and self.can_afford(b)
-
-    async def defend_double_proxy(self) -> bool:
-        half_size = self.start_location.distance_to(self.game_info.map_center)
-        proxy_barracks = self.known_enemy_structures.of_type({UnitTypeId.BARRACKS}).closer_than(half_size,
-                                                                                                self.start_location)
-        if proxy_barracks.exists:
-            townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
-            await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
-                                                                               townhall_to_defend.position))
-            sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
-            if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
-                await self.train(UnitTypeId.HYDRALISK)
-            elif sp.exists:
-                abilities = await self.get_available_abilities(sp.first)
-                if UpgradeId.ZERGLINGMOVEMENTSPEED in abilities:
-                    await self.do(sp.first(UpgradeId.ZERGLINGMOVEMENTSPEED))
-                await self.train(UnitTypeId.ZERGLING)
-                if self.units(UnitTypeId.SPINECRAWLER).amount <= 2:
-                    await self.build(UnitTypeId.SPINECRAWLER,
-                                     near=townhall_to_defend.position.towards(self.game_info.map_center, 5),
-                                     random_alternative=False)
-            else:
-                await self.train(UnitTypeId.DRONE)
-
-            for a in self.units(UnitTypeId.EXTRACTOR).ready:
-                for w in self.workers.closer_than(2.5, a):
-                    await self.do(w.gather(self.state.mineral_field.closest_to(w)))
-
-            forces = self.units.of_type({UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING})
-            for d in self.units(UnitTypeId.DRONE).idle:
-                await self.do(d.gather(self.state.mineral_field.closest_to(d)))
-
-            if forces.idle.amount > 40 and self.time - self.last_enemy_time > 30:
-                for f in forces.closer_than(half_size, self.start_location):
-                    await self.do(f.attack(self.select_target()))
-
-            if forces.idle.amount > 10:
-                for f in forces.idle.random_group_of(
-                        10 - min(forces.closer_than(half_size, self.enemy_start_locations[0]).amount, 10)):
-                    f: Unit = f
-                    await self.do(f.move(self.enemy_start_locations[0]))
-
-            marines = self.known_enemy_units.of_type({UnitTypeId.MARINE})
-            for t in self.townhalls.ready:
-                t: Unit = t
-                await self.inject_larva(t)
-                if marines.exists and marines.closest_distance_to(t) < 10:
-                    joint_forces = forces.idle | self.units(UnitTypeId.DRONE).closer_than(10, t.position)
-                    for j in joint_forces:
-                        j: Unit = j
-                        if not j.is_attacking:
-                            await self.do(j.attack(marines.random.position))
-                    return True
-            return True
-
-        return False
 
     def select_target(self):
         if self.known_enemy_structures.exists:
@@ -502,3 +453,119 @@ class MyBot(sc2.BotAI):
         # choose best fitting point
         result = min(possible_points, key=lambda p: sum(p.distance_to(resource) for resource in resources))
         self.expansion_locs[result] = resources
+
+    async def defend_double_proxy(self) -> bool:
+        half_size = self.start_location.distance_to(self.game_info.map_center)
+        proxy_barracks = self.known_enemy_structures.of_type({UnitTypeId.BARRACKS}).closer_than(half_size,
+                                                                                                self.start_location)
+        if proxy_barracks.exists:
+            townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
+            await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
+                                                                               townhall_to_defend.position))
+            sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
+            if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
+                await self.train(UnitTypeId.HYDRALISK)
+            elif sp.exists:
+                abilities = await self.get_available_abilities(sp.first)
+                if UpgradeId.ZERGLINGMOVEMENTSPEED in abilities:
+                    await self.do(sp.first(UpgradeId.ZERGLINGMOVEMENTSPEED))
+                await self.train(UnitTypeId.ZERGLING)
+                if self.units(UnitTypeId.SPINECRAWLER).amount <= 2:
+                    await self.build(UnitTypeId.SPINECRAWLER,
+                                     near=townhall_to_defend.position.towards(self.game_info.map_center, 5),
+                                     random_alternative=False)
+            else:
+                await self.train(UnitTypeId.DRONE)
+
+            for a in self.units(UnitTypeId.EXTRACTOR).ready:
+                for w in self.workers.closer_than(2.5, a):
+                    await self.do(w.gather(self.state.mineral_field.closest_to(w)))
+
+            forces = self.units.of_type({UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING})
+            for d in self.units(UnitTypeId.DRONE).idle:
+                await self.do(d.gather(self.state.mineral_field.closest_to(d)))
+
+            if forces.idle.amount > 40 and self.time - self.last_enemy_time > 30:
+                for f in forces.closer_than(half_size, self.start_location):
+                    await self.do(f.attack(self.select_target()))
+
+            if forces.idle.amount > 10:
+                for f in forces.idle.random_group_of(
+                        10 - min(forces.closer_than(half_size, self.enemy_start_locations[0]).amount, 10)):
+                    f: Unit = f
+                    await self.do(f.move(self.enemy_start_locations[0]))
+
+            marines = self.known_enemy_units.of_type({UnitTypeId.MARINE})
+            for t in self.townhalls.ready:
+                t: Unit = t
+                await self.inject_larva(t)
+                if marines.exists and marines.closest_distance_to(t) < 10:
+                    joint_forces = forces.idle | self.units(UnitTypeId.DRONE).closer_than(10, t.position)
+                    for j in joint_forces:
+                        j: Unit = j
+                        if not j.is_attacking:
+                            await self.do(j.attack(marines.random.position))
+                    return True
+            return True
+
+        return False
+
+    async def defend_cannon_rush(self):
+        half_size = self.start_location.distance_to(self.game_info.map_center)
+        cannons = self.known_enemy_structures.of_type({
+            UnitTypeId.PYLON,
+            UnitTypeId.PHOTONCANNON
+        }).closer_than(20, self.start_location)
+        if cannons.exists:
+            # production queue
+            sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
+            if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
+                await self.train(UnitTypeId.HYDRALISK)
+            elif sp.exists:
+                abilities = await self.get_available_abilities(sp.first)
+                if UpgradeId.ZERGLINGMOVEMENTSPEED in abilities:
+                    await self.do(sp.first(UpgradeId.ZERGLINGMOVEMENTSPEED))
+                if self.units(UnitTypeId.SPINECRAWLER).closer_than(7, self.start_location).amount <= 1:
+                    await self.build(
+                        UnitTypeId.SPINECRAWLER,
+                        self.state.mineral_field.closest_to(self.start_location).position,
+                        random_alternative=False
+                    )
+                if self.units(UnitTypeId.SPINECRAWLER).closer_than(3, sp.first.position).amount <= 0:
+                    p: Point2 = sp.first.position.random_on_distance(3)
+                    if not self.known_enemy_structures.of_type({UnitTypeId.PHOTONCANNON}).closer_than(7, p).exists:
+                        await self.build(
+                            UnitTypeId.SPINECRAWLER,
+                            sp.first.position,
+                            random_alternative=False
+                        )
+
+                await self.train(UnitTypeId.ZERGLING)
+            # stop gathering gas
+            for a in self.units(UnitTypeId.EXTRACTOR).ready:
+                for w in self.workers.closer_than(2.5, a):
+                    await self.do(w.gather(self.state.mineral_field.closest_to(w)))
+
+            for d in self.units(UnitTypeId.DRONE).idle:
+                await self.do(d.gather(self.state.mineral_field.closest_to(d)))
+
+            forces = self.units.of_type({UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING})
+
+            if forces.idle.amount > 40:
+                for f in forces.closer_than(half_size, self.start_location):
+                    await self.do(f.attack(self.select_target()))
+
+            if forces.idle.amount > 10:
+                for f in forces.idle.random_group_of(
+                        10 - min(forces.closer_than(half_size, self.enemy_start_locations[0]).amount, 10)):
+                    f: Unit = f
+                    await self.do(f.move(self.enemy_start_locations[0]))
+
+            for t in self.townhalls.ready:
+                t: Unit = t
+                await self.inject_larva(t)
+                lv = self.units(UnitTypeId.LARVA).closer_than(10, t.position)
+                if t.surplus_harvesters < 0 and lv.exists:
+                    await self.do(lv.first.train(UnitTypeId.DRONE))
+            return True
+        return False
