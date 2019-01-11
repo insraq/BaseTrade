@@ -151,7 +151,7 @@ class MyBot(sc2.BotAI):
         if zergling_amount < 9 or \
                 self.minerals - self.vespene > 500 or \
                 (self.already_pending_upgrade(UpgradeId.ZERGLINGATTACKSPEED) == 1 and zergling_amount < 40):
-            self.production_order.append(UnitTypeId.ZERGLING)
+            self.production_order.insert(0, UnitTypeId.ZERGLING)
 
         if not self.units(UnitTypeId.LAIR).exists and \
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
