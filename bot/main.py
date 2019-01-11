@@ -16,13 +16,19 @@ class MyBot(sc2.BotAI):
         super().__init__()
         self.last_scout_time = 0
         self.scout_units = set()
-        self.last_overseer_time = 0
         self.resource_list: List[List] = None
         self.expansion_locs = {}
         self.time_table = {}
         self.creep_queen_tag = 0
         self.hq: Unit = None
         self.all_in = False
+
+        # enemy stats
+        self.last_enemy_time = 0
+        self.last_enemy_count = 0
+        self.enemy_insight_frames = 0
+        self.last_enemy_positions = []
+
         self.build_order = [
             UnitTypeId.SPAWNINGPOOL,
             # ROACHWARREN,
@@ -31,11 +37,6 @@ class MyBot(sc2.BotAI):
             # SPIRE,
         ]
         self.production_order = []
-
-    def select_target(self):
-        if self.known_enemy_structures.exists:
-            return self.known_enemy_structures.furthest_to(self.enemy_start_locations[0]).position
-        return self.enemy_start_locations[0]
 
     async def on_step(self, iteration):
         larvae = self.units(UnitTypeId.LARVA)
@@ -58,22 +59,25 @@ class MyBot(sc2.BotAI):
                 await self.do(larvae.random.train(UnitTypeId.OVERLORD))
                 return
 
+        # enemy info
+        self.calc_enemy_info()
+
         # defend strategy
-        enemy_units_nearby = self.known_enemy_units.exclude_type(
-            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(10, self.start_location)
-        enemy_workers_nearby = self.known_enemy_units.of_type(
-            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(10, self.start_location)
-        if (enemy_units_nearby.exists or enemy_workers_nearby.exists) and \
-                self.units.of_type({UnitTypeId.ZERGLING, UnitTypeId.HYDRALISK,
-                                    UnitTypeId.ROACH}).amount < enemy_units_nearby.amount + enemy_workers_nearby.amount:
+        if self.last_enemy_positions and self.start_location.distance_to_closest(self.last_enemy_positions) < 10 and \
+                (self.last_enemy_count >= 5 or self.enemy_insight_frames >= 10):
             if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
                 await self.train(UnitTypeId.HYDRALISK)
             elif self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
                 await self.train(UnitTypeId.ZERGLING)
-            for u in self.units.of_type({UnitTypeId.DRONE, UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING}):
+
+            army = {UnitTypeId.DRONE, UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING}
+            if self.units.of_type(
+                    {UnitTypeId.ZERGLING, UnitTypeId.HYDRALISK, UnitTypeId.ROACH}).amount < self.last_enemy_count:
+                army.add(UnitTypeId.DRONE)
+            for u in self.units.of_type(army):
                 u: Unit = u
                 if not u.is_attacking:
-                    await self.do(u.attack((enemy_units_nearby | enemy_workers_nearby).random.position))
+                    await self.do(u.attack(u.position.closest(self.last_enemy_positions)))
             self.all_in = True
             return
         elif self.all_in:
@@ -132,8 +136,7 @@ class MyBot(sc2.BotAI):
             target = self.select_target()
             for unit in forces:
                 unit: Unit = unit
-                if not unit.is_attacking:
-                    actions.append(unit.attack(target))
+                actions.append(unit.attack(target))
         else:
             far_h = self.townhalls.furthest_to(self.start_location)
             for unit in forces.further_than(10, far_h.position):
@@ -202,7 +205,7 @@ class MyBot(sc2.BotAI):
                 if self.townhalls.closer_than(self.EXPANSION_GAP_THRESHOLD, loc).amount == 0:
                     empty_expansions.add(loc)
             pos = self.start_location.closest(empty_expansions)
-            await self.do(self.workers.random.build(UnitTypeId.HATCHERY, pos))
+            await self.build(UnitTypeId.HATCHERY, pos, max_distance=2, random_alternative=False, placement_step=1)
 
         if self.units(UnitTypeId.OVERLORD).amount == 1:
             o: Unit = self.units(UnitTypeId.OVERLORD).first
@@ -262,6 +265,32 @@ class MyBot(sc2.BotAI):
 
     def should_build(self, b):
         return not self.units(b).exists and self.already_pending(b) == 0 and self.can_afford(b)
+
+    def select_target(self):
+        if self.known_enemy_structures.exists:
+            return self.known_enemy_structures.furthest_to(self.enemy_start_locations[0]).position
+        return self.enemy_start_locations[0]
+
+    def calc_enemy_info(self):
+        self.last_enemy_count = 0
+        self.last_enemy_positions = []
+        has_enemy = False
+        for t in self.units.structure:
+            t: Unit = t
+            threats = self.known_enemy_units.exclude_type({
+                UnitTypeId.OVERLORD,
+                UnitTypeId.OVERSEER
+            }).closer_than(10, t)
+            self.last_enemy_count += threats.amount
+            if threats.exists:
+                self.last_enemy_positions.append(threats.closest_to(t).position)
+                has_enemy = True
+
+        if has_enemy:
+            self.enemy_insight_frames += 1
+            self.last_enemy_time = self.time
+        else:
+            self.enemy_insight_frames = 0
 
     async def produce_unit(self):
         if UnitTypeId.QUEEN in self.production_order or self.should_expand() or self.supply_left == 0:
