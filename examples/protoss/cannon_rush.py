@@ -10,18 +10,16 @@ class CannonRushBot(sc2.BotAI):
         if iteration == 0:
             await self.chat_send("(probe)(pylon)(cannon)(cannon)(gg)")
 
-        actions = []
-
         if not self.units(NEXUS).exists:
             for worker in self.workers:
-                actions.append(worker.attack(self.enemy_start_locations[0]))
+                await self.do(worker.attack(self.enemy_start_locations[0]))
             return
         else:
             nexus = self.units(NEXUS).first
 
         if self.workers.amount < 16 and nexus.noqueue:
             if self.can_afford(PROBE):
-                actions.append(nexus.train(PROBE))
+                await self.do(nexus.train(PROBE))
 
         elif not self.units(PYLON).exists and not self.already_pending(PYLON):
             if self.can_afford(PYLON):
@@ -51,8 +49,6 @@ class CannonRushBot(sc2.BotAI):
                     r = await self.build(building, near=pos)
                     if not r: # success
                         break
-                        
-        await self.do_actions(actions)
 
 def main():
     sc2.run_game(sc2.maps.get("(2)CatalystLE"), [

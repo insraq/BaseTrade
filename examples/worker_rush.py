@@ -4,11 +4,9 @@ from sc2.player import Bot, Computer
 
 class WorkerRushBot(sc2.BotAI):
     async def on_step(self, iteration):
-        actions = []
         if iteration == 0:
             for worker in self.workers:
-                actions.append(worker.attack(self.enemy_start_locations[0]))
-            await self.do_actions(actions)
+                await self.do(worker.attack(self.enemy_start_locations[0]))
 
 def main():
     run_game(maps.get("Abyssal Reef LE"), [

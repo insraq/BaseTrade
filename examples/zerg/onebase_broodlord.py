@@ -20,16 +20,14 @@ class BroodlordBot(sc2.BotAI):
     async def on_step(self, iteration):
         larvae = self.units(LARVA)
         forces = self.units(ZERGLING) | self.units(CORRUPTOR) | self.units(BROODLORD)
-        actions = []
 
         if self.units(BROODLORD).amount > 2 and iteration % 50 == 0:
             for unit in forces:
-                actions.append(unit.attack(self.select_target()))
+                await self.do(unit.attack(self.select_target()))
 
         if self.supply_left < 2:
             if self.can_afford(OVERLORD) and larvae.exists:
-                actions.append(larvae.random.train(OVERLORD))
-                await self.do_actions(actions)
+                await self.do(larvae.random.train(OVERLORD))
                 return
 
         if self.units(GREATERSPIRE).ready.exists:
@@ -37,16 +35,14 @@ class BroodlordBot(sc2.BotAI):
             # build half-and-half corruptors and broodlords
             if corruptors.exists and corruptors.amount > self.units(BROODLORD).amount:
                 if self.can_afford(BROODLORD):
-                    actions.append(corruptors.random.train(BROODLORD))
+                    await self.do(corruptors.random.train(BROODLORD))
             elif self.can_afford(CORRUPTOR) and larvae.exists:
-                actions.append(larvae.random.train(CORRUPTOR))
-                await self.do_actions(actions)
+                await self.do(larvae.random.train(CORRUPTOR))
                 return
 
         if not self.townhalls.exists:
             for unit in self.units(DRONE) | self.units(QUEEN) | forces:
-                actions.append(unit.attack(self.enemy_start_locations[0]))
-            await self.do_actions(actions)
+                await self.do(unit.attack(self.enemy_start_locations[0]))
             return
         else:
             hq = self.townhalls.first
@@ -54,7 +50,7 @@ class BroodlordBot(sc2.BotAI):
         for queen in self.units(QUEEN).idle:
             abilities = await self.get_available_abilities(queen)
             if AbilityId.EFFECT_INJECTLARVA in abilities:
-                actions.append(queen(EFFECT_INJECTLARVA, hq))
+                await self.do(queen(EFFECT_INJECTLARVA, hq))
 
         if not (self.units(SPAWNINGPOOL).exists or self.already_pending(SPAWNINGPOOL)):
             if self.can_afford(SPAWNINGPOOL):
@@ -63,7 +59,7 @@ class BroodlordBot(sc2.BotAI):
         if self.units(SPAWNINGPOOL).ready.exists:
             if not self.units(LAIR).exists and not self.units(HIVE).exists and hq.noqueue:
                 if self.can_afford(LAIR):
-                    actions.append(hq.build(LAIR))
+                    await self.do(hq.build(LAIR))
 
         if self.units(LAIR).ready.exists:
             if not (self.units(INFESTATIONPIT).exists or self.already_pending(INFESTATIONPIT)):
@@ -76,44 +72,41 @@ class BroodlordBot(sc2.BotAI):
 
         if self.units(INFESTATIONPIT).ready.exists and not self.units(HIVE).exists and hq.noqueue:
             if self.can_afford(HIVE):
-                actions.append(hq.build(HIVE))
+                await self.do(hq.build(HIVE))
 
         if self.units(HIVE).ready.exists:
             spires = self.units(SPIRE).ready
             if spires.exists:
                 spire = spires.random
                 if self.can_afford(GREATERSPIRE) and spire.noqueue:
-                    actions.append(spire.build(GREATERSPIRE))
+                    await self.do(spire.build(GREATERSPIRE))
 
         if self.units(EXTRACTOR).amount < 2 and not self.already_pending(EXTRACTOR):
             if self.can_afford(EXTRACTOR):
                 drone = self.workers.random
                 target = self.state.vespene_geyser.closest_to(drone.position)
-                err = actions.append(drone.build(EXTRACTOR, target))
+                err = await self.do(drone.build(EXTRACTOR, target))
 
         if hq.assigned_harvesters < hq.ideal_harvesters:
             if self.can_afford(DRONE) and larvae.exists:
                 larva = larvae.random
-                actions.append(larva.train(DRONE))
-                await self.do_actions(actions)
+                await self.do(larva.train(DRONE))
                 return
 
         for a in self.units(EXTRACTOR):
             if a.assigned_harvesters < a.ideal_harvesters:
                 w = self.workers.closer_than(20, a)
                 if w.exists:
-                    actions.append(w.random.gather(a))
+                    await self.do(w.random.gather(a))
 
         if self.units(SPAWNINGPOOL).ready.exists:
             if not self.units(QUEEN).exists and hq.is_ready and hq.noqueue:
                 if self.can_afford(QUEEN):
-                    actions.append(hq.train(QUEEN))
+                    await self.do(hq.train(QUEEN))
 
         if self.units(ZERGLING).amount < 40 and self.minerals > 1000:
             if larvae.exists and self.can_afford(ZERGLING):
-                actions.append(larvae.random.train(ZERGLING))
-
-        await self.do_actions(actions)
+                await self.do(larvae.random.train(ZERGLING))
 
 def main():
     sc2.run_game(sc2.maps.get("(2)CatalystLE"), [

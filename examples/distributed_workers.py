@@ -12,11 +12,9 @@ class TerranBot(sc2.BotAI):
         await self.expand()
 
     async def build_workers(self):
-        actions = []
         for cc in self.units(UnitTypeId.COMMANDCENTER).ready.noqueue:
             if self.can_afford(UnitTypeId.SCV):
-                actions.append(cc.train(UnitTypeId.SCV))
-        await self.do_actions(actions)
+                await self.do(cc.train(UnitTypeId.SCV))
 
     async def expand(self):
         if self.units(UnitTypeId.COMMANDCENTER).amount < 3 and self.can_afford(UnitTypeId.COMMANDCENTER):

@@ -22,14 +22,11 @@ class ProxyRaxBot(sc2.BotAI):
         return self.state.mineral_field.random.position
 
     async def on_step(self, iteration):
-        actions = []
-
         cc = self.units(COMMANDCENTER)
         if not cc.exists:
             target = self.known_enemy_structures.random_or(self.enemy_start_locations[0]).position
             for unit in self.workers | self.units(CYCLONE):
-                actions.append(unit.attack(target))
-            await self.do_actions(actions)
+                await self.do(unit.attack(target))
             return
         else:
             cc = cc.first
@@ -40,13 +37,13 @@ class ProxyRaxBot(sc2.BotAI):
             forces = self.units(CYCLONE)
             if (iteration//50) % 10 == 0:
                 for unit in forces:
-                    actions.append(unit.attack(target))
+                    await self.do(unit.attack(target))
             else:
                 for unit in forces.idle:
-                    actions.append(unit.attack(target))
+                    await self.do(unit.attack(target))
 
         if self.can_afford(SCV) and self.workers.amount < 22 and cc.noqueue:
-            actions.append(cc.train(SCV))
+            await self.do(cc.train(SCV))
 
         elif self.supply_left < 3:
             if self.can_afford(SUPPLYDEPOT) and self.already_pending(SUPPLYDEPOT) < 2:
@@ -68,7 +65,7 @@ class ProxyRaxBot(sc2.BotAI):
                         if worker is None:
                             break
 
-                        actions.append(worker.build(REFINERY, vg))
+                        await self.do(worker.build(REFINERY, vg))
                         break
 
             if self.units(BARRACKS).ready.exists:
@@ -80,19 +77,17 @@ class ProxyRaxBot(sc2.BotAI):
         for factory in self.units(FACTORY).ready.noqueue:
             # Reactor allows us to build two at a time
             if self.can_afford(CYCLONE):
-                actions.append(factory.train(CYCLONE))
+                await self.do(factory.train(CYCLONE))
 
 
         for a in self.units(REFINERY):
             if a.assigned_harvesters < a.ideal_harvesters:
                 w = self.workers.closer_than(20, a)
                 if w.exists:
-                    actions.append(w.random.gather(a))
+                    await self.do(w.random.gather(a))
 
         for scv in self.units(SCV).idle:
-            actions.append(scv.gather(self.state.mineral_field.closest_to(cc)))
-
-        await self.do_actions(actions)
+            await self.do(scv.gather(self.state.mineral_field.closest_to(cc)))
 
 def main():
     sc2.run_game(sc2.maps.get("(2)CatalystLE"), [

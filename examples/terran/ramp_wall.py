@@ -9,8 +9,6 @@ from sc2.position import Point2, Point3
 
 class RampWallBot(sc2.BotAI):
     async def on_step(self, iteration):
-        actions = []
-
         cc = self.units(COMMANDCENTER)
         if not cc.exists:
             return
@@ -18,7 +16,7 @@ class RampWallBot(sc2.BotAI):
             cc = cc.first
 
         if self.can_afford(SCV) and self.workers.amount < 16 and cc.noqueue:
-            actions.append(cc.train(SCV))
+            await self.do(cc.train(SCV))
 
 
         # Raise depos when enemies are nearby
@@ -27,13 +25,13 @@ class RampWallBot(sc2.BotAI):
                 if unit.position.to2.distance_to(depo.position.to2) < 15:
                     break
             else:
-                actions.append(depo(MORPH_SUPPLYDEPOT_LOWER))
+                await self.do(depo(MORPH_SUPPLYDEPOT_LOWER))
 
         # Lower depos when no enemies are nearby
         for depo in self.units(SUPPLYDEPOTLOWERED).ready:
             for unit in self.known_enemy_units.not_structure:
                 if unit.position.to2.distance_to(depo.position.to2) < 10:
-                    actions.append(depo(MORPH_SUPPLYDEPOT_RAISE))
+                    await self.do(depo(MORPH_SUPPLYDEPOT_RAISE))
                     break
 
         depot_placement_positions = self.main_base_ramp.corner_depots
@@ -54,26 +52,22 @@ class RampWallBot(sc2.BotAI):
         # Build depots
         if self.can_afford(SUPPLYDEPOT) and not self.already_pending(SUPPLYDEPOT):
             if len(depot_placement_positions) == 0:
-                await self.do_actions(actions)
                 return
             # Choose any depot location
             target_depot_location = depot_placement_positions.pop()
             ws = self.workers.gathering
             if ws: # if workers were found
                 w = ws.random
-                actions.append(w.build(SUPPLYDEPOT, target_depot_location))
+                await self.do(w.build(SUPPLYDEPOT, target_depot_location))
 
         # Build barracks
         if depots.ready.exists and self.can_afford(BARRACKS) and not self.already_pending(BARRACKS):
             if self.units(BARRACKS).amount + self.already_pending(BARRACKS) > 0:
-                await self.do_actions(actions)
                 return
             ws = self.workers.gathering
             if ws and barracks_placement_position: # if workers were found
                 w = ws.random
-                actions.append(w.build(BARRACKS, barracks_placement_position))
-
-        await self.do_actions(actions)
+                await self.do(w.build(BARRACKS, barracks_placement_position))
 
 
 

@@ -17,12 +17,9 @@ class ThreebaseVoidrayBot(sc2.BotAI):
         if iteration == 0:
             await self.chat_send("(glhf)")
 
-        actions = []
-
         if not self.units(NEXUS).ready.exists:
             for worker in self.workers:
-                actions.append(worker.attack(self.enemy_start_locations[0]))
-            await self.do_actions(actions)
+                await self.do(worker.attack(self.enemy_start_locations[0]))
             return
         else:
             nexus = self.units(NEXUS).ready.random
@@ -30,31 +27,30 @@ class ThreebaseVoidrayBot(sc2.BotAI):
         if not nexus.has_buff(BuffId.CHRONOBOOSTENERGYCOST):
             abilities = await self.get_available_abilities(nexus)
             if AbilityId.EFFECT_CHRONOBOOSTENERGYCOST in abilities:
-                actions.append(nexus(AbilityId.EFFECT_CHRONOBOOSTENERGYCOST, nexus))
+                await self.do(nexus(AbilityId.EFFECT_CHRONOBOOSTENERGYCOST, nexus))
 
         for idle_worker in self.workers.idle:
             mf = self.state.mineral_field.closest_to(idle_worker)
-            actions.append(idle_worker.gather(mf))
+            await self.do(idle_worker.gather(mf))
 
         if self.units(VOIDRAY).amount > 10 and iteration % 50 == 0:
             for vr in self.units(VOIDRAY).idle:
-                actions.append(vr.attack(self.select_target(self.state)))
+                await self.do(vr.attack(self.select_target(self.state)))
 
         for a in self.units(ASSIMILATOR):
             if a.assigned_harvesters < a.ideal_harvesters:
                 w = self.workers.closer_than(20, a)
                 if w.exists:
-                    actions.append(w.random.gather(a))
+                    await self.do(w.random.gather(a))
 
         if self.supply_left < 2 and not self.already_pending(PYLON):
             if self.can_afford(PYLON):
                 await self.build(PYLON, near=nexus)
-            await self.do_actions(actions)
             return
 
         if self.workers.amount < self.units(NEXUS).amount*15 and nexus.noqueue:
             if self.can_afford(PROBE):
-                actions.append(nexus.train(PROBE))
+                await self.do(nexus.train(PROBE))
 
         elif not self.units(PYLON).exists and not self.already_pending(PYLON):
             if self.can_afford(PYLON):
@@ -85,7 +81,7 @@ class ThreebaseVoidrayBot(sc2.BotAI):
                     break
 
                 if not self.units(ASSIMILATOR).closer_than(1.0, vg).exists:
-                    actions.append(worker.build(ASSIMILATOR, vg))
+                    await self.do(worker.build(ASSIMILATOR, vg))
 
         if self.units(PYLON).ready.exists and self.units(CYBERNETICSCORE).ready.exists:
             pylon = self.units(PYLON).ready.random
@@ -95,9 +91,7 @@ class ThreebaseVoidrayBot(sc2.BotAI):
 
         for sg in self.units(STARGATE).ready.noqueue:
             if self.can_afford(VOIDRAY):
-                actions.append(sg.train(VOIDRAY))
-
-        await self.do_actions(actions)
+                await self.do(sg.train(VOIDRAY))
 
 def main():
     sc2.run_game(sc2.maps.get("(2)CatalystLE"), [

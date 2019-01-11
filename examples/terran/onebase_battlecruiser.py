@@ -22,14 +22,11 @@ class ProxyRaxBot(sc2.BotAI):
         return self.state.mineral_field.random.position
 
     async def on_step(self, iteration):
-        actions = []
-
         cc = (self.units(COMMANDCENTER) | self.units(ORBITALCOMMAND))
         if not cc.exists:
             target = self.known_enemy_structures.random_or(self.enemy_start_locations[0]).position
             for unit in self.workers | self.units(BATTLECRUISER):
-                actions.append(unit.attack(target))
-            await self.do_actions(actions)
+                await self.do(unit.attack(target))
             return
         else:
             cc = cc.first
@@ -40,20 +37,20 @@ class ProxyRaxBot(sc2.BotAI):
             forces = self.units(BATTLECRUISER)
             if (iteration//50) % 10 == 0:
                 for unit in forces:
-                    actions.append(unit.attack(target))
+                    await self.do(unit.attack(target))
             else:
                 for unit in forces.idle:
-                    actions.append(unit.attack(target))
+                    await self.do(unit.attack(target))
 
         if self.can_afford(SCV) and self.workers.amount < 22 and cc.noqueue:
-            actions.append(cc.train(SCV))
+            await self.do(cc.train(SCV))
 
         if self.units(FUSIONCORE).exists and self.can_afford(BATTLECRUISER):
             for sp in self.units(STARPORT):
                 if sp.has_add_on and sp.noqueue:
                     if not self.can_afford(BATTLECRUISER):
                         break
-                    actions.append(sp.train(BATTLECRUISER))
+                    await self.do(sp.train(BATTLECRUISER))
 
         elif self.supply_left < 3:
             if self.can_afford(SUPPLYDEPOT):
@@ -75,7 +72,7 @@ class ProxyRaxBot(sc2.BotAI):
                         if worker is None:
                             break
 
-                        actions.append(worker.build(REFINERY, vg))
+                        await self.do(worker.build(REFINERY, vg))
                         break
 
             if self.units(BARRACKS).ready.exists:
@@ -89,7 +86,7 @@ class ProxyRaxBot(sc2.BotAI):
 
         for sp in self.units(STARPORT).ready:
             if sp.add_on_tag == 0:
-                actions.append(sp.build(STARPORTTECHLAB))
+                await self.do(sp.build(STARPORTTECHLAB))
 
         if self.units(STARPORT).ready.exists:
             if self.can_afford(FUSIONCORE) and not self.units(FUSIONCORE).exists:
@@ -99,12 +96,10 @@ class ProxyRaxBot(sc2.BotAI):
             if a.assigned_harvesters < a.ideal_harvesters:
                 w = self.workers.closer_than(20, a)
                 if w.exists:
-                    actions.append(w.random.gather(a))
+                    await self.do(w.random.gather(a))
 
         for scv in self.units(SCV).idle:
-            actions.append(scv.gather(self.state.mineral_field.closest_to(cc)))
-
-        await self.do_actions(actions)
+            await self.do(scv.gather(self.state.mineral_field.closest_to(cc)))
 
 def main():
     sc2.run_game(sc2.maps.get("(2)CatalystLE"), [
