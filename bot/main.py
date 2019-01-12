@@ -65,7 +65,7 @@ class MyBot(sc2.BotAI):
         self.calc_enemy_info()
 
         # counter timing attack
-        if await self.defend_double_proxy():
+        if await self.defend_double_proxy_or_zergling_rush():
             return
         if await self.defend_cannon_rush():
             return
@@ -454,11 +454,13 @@ class MyBot(sc2.BotAI):
         result = min(possible_points, key=lambda p: sum(p.distance_to(resource) for resource in resources))
         self.expansion_locs[result] = resources
 
-    async def defend_double_proxy(self) -> bool:
+    async def defend_double_proxy_or_zergling_rush(self) -> bool:
         half_size = self.start_location.distance_to(self.game_info.map_center)
         proxy_barracks = self.known_enemy_structures.of_type({UnitTypeId.BARRACKS}).closer_than(half_size,
                                                                                                 self.start_location)
-        if proxy_barracks.exists:
+        enemy_zerglings = self.known_enemy_units.of_type({UnitTypeId.ZERGLING}).closer_than(half_size,
+                                                                                                self.start_location)
+        if proxy_barracks.exists or enemy_zerglings.amount > self.units(UnitTypeId.ZERGLING).amount:
             townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
             await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
                                                                                townhall_to_defend.position))
