@@ -500,8 +500,7 @@ class MyBot(sc2.BotAI):
         half_size = self.start_location.distance_to(self.game_info.map_center)
         proxy_barracks = self.known_enemy_structures.of_type({UnitTypeId.BARRACKS}).closer_than(half_size,
                                                                                                 self.start_location)
-        enemy_units = self.known_enemy_units.of_type({UnitTypeId.ZERGLING, UnitTypeId.DRONE}) \
-            .closer_than(half_size, self.start_location)
+        enemy_units = self.known_enemy_units.closer_than(half_size, self.start_location)
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or enemy_units.amount > min(self.units(UnitTypeId.ZERGLING).amount, 5)):
 
