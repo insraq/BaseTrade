@@ -276,8 +276,10 @@ class MyBot(sc2.BotAI):
         if self.townhalls.amount < 2:
             return
         for i, b in enumerate(self.build_order):
-            if (i == 0 or self.units(self.build_order[i - 1]).exists) and self.should_build(b):
-                await self.build(b, near=self.hq.position.random_on_distance(10))
+            p = self.townhalls.random.position.random_on_distance(10)
+            if (i == 0 or self.units(self.build_order[i - 1]).exists) and self.should_build(
+                    b) and self.is_location_safe(p):
+                await self.build(b, near=p)
         if self.should_build(UnitTypeId.INFESTATIONPIT) and self.supply_used > 150:
             self.production_order = []
             await self.build(UnitTypeId.INFESTATIONPIT, near=self.hq.position.random_on_distance(10))
@@ -406,6 +408,10 @@ class MyBot(sc2.BotAI):
             total_ideal_harvesters += t.ideal_harvesters
         return total_ideal_harvesters < 16 * 4
 
+    def is_location_safe(self, p: Point2):
+        return not self.known_enemy_structures.of_type(
+            {UnitTypeId.PHOTONCANNON, UnitTypeId.SPINECRAWLER, UnitTypeId.BUNKER}).closer_than(7, p).exists
+
     def calc_resource_list(self):
         if self.resource_list is not None:
             return
@@ -465,10 +471,12 @@ class MyBot(sc2.BotAI):
             townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
             await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
                                                                                townhall_to_defend.position))
-            sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
+
             if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
                 await self.train(UnitTypeId.HYDRALISK)
-            elif sp.exists:
+
+            sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
+            if sp.exists:
                 abilities = await self.get_available_abilities(sp.first)
                 if UpgradeId.ZERGLINGMOVEMENTSPEED in abilities:
                     await self.do(sp.first(UpgradeId.ZERGLINGMOVEMENTSPEED))
@@ -521,10 +529,11 @@ class MyBot(sc2.BotAI):
         }).closer_than(20, self.start_location)
         if cannons.exists:
             # production queue
-            sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
             if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
                 await self.train(UnitTypeId.HYDRALISK)
-            elif sp.exists:
+
+            sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
+            if sp.exists:
                 abilities = await self.get_available_abilities(sp.first)
                 if UpgradeId.ZERGLINGMOVEMENTSPEED in abilities:
                     await self.do(sp.first(UpgradeId.ZERGLINGMOVEMENTSPEED))
@@ -536,7 +545,7 @@ class MyBot(sc2.BotAI):
                     )
                 if self.units(UnitTypeId.SPINECRAWLER).closer_than(3, sp.first.position).amount <= 0:
                     p: Point2 = sp.first.position.random_on_distance(3)
-                    if not self.known_enemy_structures.of_type({UnitTypeId.PHOTONCANNON}).closer_than(7, p).exists:
+                    if self.is_location_safe(p):
                         await self.build(
                             UnitTypeId.SPINECRAWLER,
                             sp.first.position,
@@ -547,7 +556,7 @@ class MyBot(sc2.BotAI):
 
             if self.should_build(UnitTypeId.SPAWNINGPOOL):
                 p: Point2 = self.townhalls.furthest_to(self.start_location).position.random_on_distance(3)
-                if not self.known_enemy_structures.of_type({UnitTypeId.PHOTONCANNON}).closer_than(7, p).exists:
+                if self.is_location_safe(p):
                     await self.build(
                         UnitTypeId.SPINECRAWLER,
                         sp.first.position,
