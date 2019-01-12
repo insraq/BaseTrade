@@ -496,9 +496,12 @@ class MyBot(sc2.BotAI):
                                                                                             self.start_location)
         if self.townhalls.ready.exists and (
                 proxy_barracks.exists or enemy_zerglings.amount > min(self.units(UnitTypeId.ZERGLING).amount, 5)):
-            townhall_to_defend = self.townhalls.furthest_to(self.start_location)
+
+            townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
             await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
                                                                                townhall_to_defend.position))
+            if self.townhalls.not_ready.exists:
+                await self.do(self.townhalls.not_ready.first(AbilityId.CANCEL))
 
             if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
                 await self.train(UnitTypeId.HYDRALISK)
