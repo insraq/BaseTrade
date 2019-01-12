@@ -75,7 +75,8 @@ class MyBot(sc2.BotAI):
             if x.type_id == UnitTypeId.DRONE and enemy_nearby.exists and workers_nearby.amount > 3:
                 for w in workers_nearby:
                     w: Unit = w
-                    await self.do(w.attack(enemy_nearby.first))
+                    if not w.is_attacking:
+                        await self.do(w.attack(enemy_nearby.first))
 
         # counter timing attack
         if await self.defend_double_proxy_or_zergling_rush():
@@ -168,7 +169,7 @@ class MyBot(sc2.BotAI):
         self.production_order.append(UnitTypeId.HYDRALISK)
 
         zergling_amount = self.units(UnitTypeId.ZERGLING).amount + self.already_pending(UnitTypeId.ZERGLING)
-        if zergling_amount < self.townhalls.amount * 6 or \
+        if zergling_amount < max(self.townhalls.amount * 4, self.last_enemy_count) or \
                 self.minerals - self.vespene > 500 or \
                 (self.already_pending_upgrade(UpgradeId.ZERGLINGATTACKSPEED) == 1 and zergling_amount < 40):
             self.production_order.insert(0, UnitTypeId.ZERGLING)
@@ -502,7 +503,7 @@ class MyBot(sc2.BotAI):
                                                                                                 self.start_location)
         enemy_units = self.known_enemy_units.of_type({UnitTypeId.ZERGLING, UnitTypeId.DRONE}) \
             .closer_than(half_size, self.start_location)
-        if self.townhalls.ready.exists and (
+        if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or enemy_units.amount > min(self.units(UnitTypeId.ZERGLING).amount, 5)):
 
             townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
