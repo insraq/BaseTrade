@@ -23,7 +23,7 @@ class MyBot(sc2.BotAI):
         self.expansion_locs = {}
         self.time_table = {}
         self.units_health = {}
-        self.units_attacked = []
+        self.units_attacked: List[Unit] = []
         self.creep_queen_tag = 0
         self.hq: Unit = None
         self.all_in = False
@@ -68,6 +68,14 @@ class MyBot(sc2.BotAI):
 
         # enemy info
         self.calc_enemy_info()
+
+        for x in self.units_attacked:
+            workers_nearby = self.workers.closer_than(5, x.position)
+            enemy_nearby = self.known_enemy_units.closer_than(5, x.position)
+            if x.type_id == UnitTypeId.DRONE and enemy_nearby.exists and workers_nearby.amount > 3:
+                for w in workers_nearby:
+                    w: Unit = w
+                    await self.do(w.attack(enemy_nearby.first))
 
         # counter timing attack
         if await self.defend_double_proxy_or_zergling_rush():
@@ -492,10 +500,10 @@ class MyBot(sc2.BotAI):
         half_size = self.start_location.distance_to(self.game_info.map_center)
         proxy_barracks = self.known_enemy_structures.of_type({UnitTypeId.BARRACKS}).closer_than(half_size,
                                                                                                 self.start_location)
-        enemy_zerglings = self.known_enemy_units.of_type({UnitTypeId.ZERGLING}).closer_than(half_size,
-                                                                                            self.start_location)
+        enemy_units = self.known_enemy_units.of_type({UnitTypeId.ZERGLING, UnitTypeId.DRONE}) \
+            .closer_than(half_size, self.start_location)
         if self.townhalls.ready.exists and (
-                proxy_barracks.exists or enemy_zerglings.amount > min(self.units(UnitTypeId.ZERGLING).amount, 5)):
+                proxy_barracks.exists or enemy_units.amount > min(self.units(UnitTypeId.ZERGLING).amount, 5)):
 
             townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
             await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
