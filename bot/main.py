@@ -543,6 +543,16 @@ class MyBot(sc2.BotAI):
                         )
 
                 await self.train(UnitTypeId.ZERGLING)
+
+            if self.should_build(UnitTypeId.SPAWNINGPOOL):
+                p: Point2 = self.townhalls.furthest_to(self.start_location).position.random_on_distance(3)
+                if not self.known_enemy_structures.of_type({UnitTypeId.PHOTONCANNON}).closer_than(7, p).exists:
+                    await self.build(
+                        UnitTypeId.SPINECRAWLER,
+                        sp.first.position,
+                        random_alternative=False
+                    )
+
             # stop gathering gas
             for a in self.units(UnitTypeId.EXTRACTOR).ready:
                 for w in self.workers.closer_than(2.5, a):
