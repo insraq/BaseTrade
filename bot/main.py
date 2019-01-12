@@ -70,13 +70,12 @@ class MyBot(sc2.BotAI):
         self.calc_enemy_info()
 
         for x in self.units_attacked:
-            workers_nearby = self.workers.closer_than(5, x.position)
+            workers_nearby = self.workers.closer_than(5, x.position).filter(lambda wk: not wk.is_attacking)
             enemy_nearby = self.known_enemy_units.closer_than(5, x.position)
             if x.type_id == UnitTypeId.DRONE and enemy_nearby.exists and workers_nearby.amount > 3:
                 for w in workers_nearby:
                     w: Unit = w
-                    if not w.is_attacking:
-                        await self.do(w.attack(enemy_nearby.first))
+                    await self.do(w.attack(enemy_nearby.first))
 
         # counter timing attack
         if await self.defend_double_proxy_or_zergling_rush():
