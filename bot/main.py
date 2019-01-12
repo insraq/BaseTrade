@@ -17,10 +17,13 @@ class MyBot(sc2.BotAI):
     def __init__(self):
         super().__init__()
         self.last_scout_time = 0
+        self.expansion_calculated = False
         self.scout_units = set()
         self.resource_list: List[List] = None
         self.expansion_locs = {}
         self.time_table = {}
+        self.units_health = {}
+        self.units_attacked = []
         self.creep_queen_tag = 0
         self.hq: Unit = None
         self.all_in = False
@@ -53,7 +56,9 @@ class MyBot(sc2.BotAI):
 
         # supply_cap does not include overload that is being built
         buffer = 2
-        if self.units(UnitTypeId.OVERLORD).amount <= 1:
+        if self.units(UnitTypeId.OVERLORD).amount == 1 and not self.units(UnitTypeId.SPAWNINGPOOL).exists:
+            buffer = 0
+        elif self.units(UnitTypeId.OVERLORD).amount == 1:
             buffer = 1
         if (self.units(UnitTypeId.OVERLORD).amount + self.already_pending(
                 UnitTypeId.OVERLORD)) * 8 + self.townhalls.ready.amount * 6 - self.supply_used < buffer:
@@ -94,6 +99,12 @@ class MyBot(sc2.BotAI):
             for u in self.units.of_type({UnitTypeId.DRONE, UnitTypeId.HYDRALISK, UnitTypeId.ZERGLING}):
                 u: Unit = u
                 await self.do(u.stop())
+
+        if self.units(UnitTypeId.SPINECRAWLER).amount + self.already_pending(
+                UnitTypeId.SPINECRAWLER) <= 0 and self.townhalls.ready.amount > 1:
+            await self.build(UnitTypeId.SPINECRAWLER,
+                             near=self.townhalls.furthest_to(self.start_location).position,
+                             random_alternative=False)
 
         # last resort
         if self.townhalls.amount <= 0:
@@ -149,7 +160,7 @@ class MyBot(sc2.BotAI):
         self.production_order.append(UnitTypeId.HYDRALISK)
 
         zergling_amount = self.units(UnitTypeId.ZERGLING).amount + self.already_pending(UnitTypeId.ZERGLING)
-        if zergling_amount < 9 or \
+        if zergling_amount < self.townhalls.amount * 6 or \
                 self.minerals - self.vespene > 500 or \
                 (self.already_pending_upgrade(UpgradeId.ZERGLINGATTACKSPEED) == 1 and zergling_amount < 40):
             self.production_order.insert(0, UnitTypeId.ZERGLING)
@@ -209,10 +220,12 @@ class MyBot(sc2.BotAI):
             pos = self.start_location.closest(empty_expansions)
             await self.build(UnitTypeId.HATCHERY, pos, max_distance=2, random_alternative=False, placement_step=1)
 
-        if self.units(UnitTypeId.OVERLORD).amount == 1:
+        if self.expansion_calculated and self.units(UnitTypeId.OVERLORD).amount == 1:
             o: Unit = self.units(UnitTypeId.OVERLORD).first
+            exps = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locs.keys()))
             await self.do_actions([
-                o.move(self.enemy_start_locations[0].towards(self.game_info.map_center, 20)),
+                o.move(self.enemy_start_locations[0].towards(self.game_info.map_center, 15)),
+                o.move(exps[1]),
                 o.move(self.game_info.map_center, queue=True)
             ])
 
@@ -273,8 +286,6 @@ class MyBot(sc2.BotAI):
                     await self.do(u.first(abilities[0]))
 
     async def build_building(self):
-        if self.townhalls.amount < 2:
-            return
         for i, b in enumerate(self.build_order):
             p = self.townhalls.random.position.random_on_distance(10)
             if (i == 0 or self.units(self.build_order[i - 1]).exists) and self.should_build(
@@ -312,6 +323,16 @@ class MyBot(sc2.BotAI):
             self.last_enemy_time = self.time
         else:
             self.enemy_insight_frames = 0
+
+        def not_full_health(u: Unit) -> bool:
+            return u.health < u.health_max
+
+        self.units_attacked = []
+        for w in self.workers.filter(not_full_health):
+            w: Unit = w
+            if w.tag in self.units_health and w.health > self.units_health[w.tag]:
+                self.units_attacked.append(w)
+            self.units_health[w.tag] = w.health
 
     async def produce_unit(self):
         if UnitTypeId.QUEEN in self.production_order or self.should_expand() or self.supply_left == 0:
@@ -400,6 +421,10 @@ class MyBot(sc2.BotAI):
             return False
         if self.units(UnitTypeId.OVERLORD).amount == 1:
             return False
+        if self.townhalls.amount == 1 and self.workers.amount + self.already_pending(UnitTypeId.DRONE) < 14:
+            return False
+        if not self.units(UnitTypeId.SPAWNINGPOOL).exists:
+            return False
         if not (self.already_pending(UnitTypeId.LAIR, all_units=True) > 0 or self.units(UnitTypeId.LAIR).exists):
             return self.townhalls.amount <= 1
         total_ideal_harvesters = 0
@@ -435,7 +460,10 @@ class MyBot(sc2.BotAI):
         self.resource_list = [g for g in r_groups if len(g) > 1]
 
     def calc_expansion_loc(self):
-        if not self.resource_list or len(self.resource_list) == 0:
+        if self.resource_list is None:
+            return
+        if len(self.resource_list) == 0:
+            self.expansion_calculated = True
             return
         # distance offsets from a gas geysir
         offsets = [(x, y) for x in range(-9, 10) for y in range(-9, 10) if 75 >= x ** 2 + y ** 2 >= 49]
@@ -481,7 +509,7 @@ class MyBot(sc2.BotAI):
                 if UpgradeId.ZERGLINGMOVEMENTSPEED in abilities:
                     await self.do(sp.first(UpgradeId.ZERGLINGMOVEMENTSPEED))
                 await self.train(UnitTypeId.ZERGLING)
-                if self.units(UnitTypeId.SPINECRAWLER).amount <= 2:
+                if self.units(UnitTypeId.SPINECRAWLER).amount + self.already_pending(UnitTypeId.SPINECRAWLER) <= 2:
                     await self.build(UnitTypeId.SPINECRAWLER,
                                      near=townhall_to_defend.position.towards(self.game_info.map_center, 5),
                                      random_alternative=False)
