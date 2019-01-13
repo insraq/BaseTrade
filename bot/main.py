@@ -228,16 +228,16 @@ class MyBot(sc2.BotAI):
                 not self.units(UnitTypeId.HIVE).exists and \
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
-                (self.supply_used > 100 and UnitTypeId.ROACHWARREN in self.build_order or
-                 self.townhalls.amount >= 3 and UnitTypeId.BANELINGNEST in self.build_order):
-            self.production_order = []
+                (self.supply_used > 100 and UnitTypeId.ROACHWARREN in self.build_order or \
+                 self.townhalls.amount >= 3 and UnitTypeId.BANELINGNEST in self.build_order) and \
+                self.can_afford_or_change_production(UnitTypeId.LAIR):
             await self.do(self.hq.build(UnitTypeId.LAIR))
 
         # hive upgrade
         if not self.units(UnitTypeId.HIVE).exists and \
                 self.already_pending(UnitTypeId.HIVE, all_units=True) == 0 and \
-                self.units(UnitTypeId.INFESTATIONPIT).ready.exists:
-            self.production_order = []
+                self.units(UnitTypeId.INFESTATIONPIT).ready.exists and \
+                self.can_afford_or_change_production(UnitTypeId.HIVE):
             await self.do(self.hq.build(UnitTypeId.HIVE))
 
         await self.call_every(self.scout_expansions, 2 * 60)
@@ -285,8 +285,9 @@ class MyBot(sc2.BotAI):
                     await self.do(w.gather(self.state.mineral_field.closest_to(w)))
 
         # overlord speed
-        if self.units(UnitTypeId.LAIR).ready.exists and self.already_pending_upgrade(UpgradeId.OVERLORDSPEED) == 0:
-            self.production_order = []
+        if self.units(UnitTypeId.LAIR).ready.exists and \
+                self.already_pending_upgrade(UpgradeId.OVERLORDSPEED) == 0 and \
+                self.can_afford_or_change_production(UpgradeId.OVERLORDSPEED):
             await self.do(self.hq.research(UpgradeId.OVERLORDSPEED))
 
         # drone
@@ -349,8 +350,7 @@ class MyBot(sc2.BotAI):
             u = self.units(b).ready
             if u.exists and u.first.is_idle:
                 abilities = await self.get_available_abilities(u.first, ignore_resource_requirements=True)
-                if len(abilities) > 0:
-                    self.production_order = []
+                if len(abilities) > 0 and self.can_afford_or_change_production(abilities[0]):
                     await self.do(u.first(abilities[0]))
 
     async def build_building(self):
@@ -366,8 +366,9 @@ class MyBot(sc2.BotAI):
                         return
                     await self.build(b, near=p)
                     return
-        if self.should_build(UnitTypeId.INFESTATIONPIT) and self.units(UnitTypeId.LAIR).ready.exists:
-            self.production_order = []
+        if self.should_build(UnitTypeId.INFESTATIONPIT) and \
+                self.units(UnitTypeId.LAIR).ready.exists and \
+                self.can_afford_or_change_production(UnitTypeId.INFESTATIONPIT):
             await self.build(UnitTypeId.INFESTATIONPIT, near=self.hq.position.random_on_distance(10))
 
     def should_build(self, b):
@@ -439,6 +440,16 @@ class MyBot(sc2.BotAI):
             self.time_table[func.__name__] = 0
         if self.time - self.time_table[func.__name__] > seconds:
             await func()
+
+    def can_afford_or_change_production(self, u) -> bool:
+        can_afford = self.can_afford(u)
+        if not can_afford.can_afford_minerals:
+            self.production_order = []
+        if not can_afford.can_afford_vespene:
+            self.production_order.remove(UnitTypeId.ROACH)
+            self.production_order.remove(UnitTypeId.HYDRALISK)
+            self.production_order.remove(UnitTypeId.MUTALISK)
+        return can_afford
 
     def potential_scout_units(self):
         scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
