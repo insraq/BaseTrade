@@ -107,7 +107,8 @@ class MyBot(sc2.BotAI):
                     await self.do(x(AbilityId.CANCEL))
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
                 await self.do(x.move(far_townhall.position.random_on_distance(5)))
-            elif forces.closer_than(10, x.position).amount > self.alive_enemy_units().closer_than(10, x.position):
+            elif forces.closer_than(10, x.position).amount > self.alive_enemy_units().closer_than(10,
+                                                                                                  x.position).amount:
                 await self.do(x.attack(enemy_nearby.first))
             else:
                 await self.do(x.move(far_townhall.position.random_on_distance(5)))
