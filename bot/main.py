@@ -93,7 +93,9 @@ class MyBot(sc2.BotAI):
         for x in self.units_attacked:
             workers_nearby = self.workers.closer_than(5, x.position).filter(lambda wk: not wk.is_attacking)
             enemy_nearby = self.alive_enemy_units().closer_than(5, x.position)
-            if x.type_id == UnitTypeId.DRONE and enemy_nearby.exists:
+            if not enemy_nearby.exists:
+                continue
+            if x.type_id == UnitTypeId.DRONE:
                 another_townhall = self.townhalls.further_than(25, x.position)
                 if forces.amount > enemy_nearby.amount and another_townhall.exists and self.townhalls.ready.amount > 3:
                     await self.do(x.move(another_townhall.first.position))
@@ -102,7 +104,7 @@ class MyBot(sc2.BotAI):
                     for w in workers_nearby:
                         w: Unit = w
                         await self.do(w.attack(enemy_nearby.first))
-            elif x.type_id == UnitTypeId.HATCHERY and enemy_nearby.exists:
+            elif x.type_id == UnitTypeId.HATCHERY:
                 if x.build_progress < 1:
                     await self.do(x(AbilityId.CANCEL))
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
