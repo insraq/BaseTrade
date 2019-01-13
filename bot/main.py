@@ -102,10 +102,14 @@ class MyBot(sc2.BotAI):
                     for w in workers_nearby:
                         w: Unit = w
                         await self.do(w.attack(enemy_nearby.first))
-            if x.type_id == UnitTypeId.HATCHERY and enemy_nearby.exists:
+            elif x.type_id == UnitTypeId.HATCHERY and enemy_nearby.exists:
                 if x.build_progress < 1:
                     await self.do(x(AbilityId.CANCEL))
-            if x.type_id == UnitTypeId.SWARMHOSTMP:
+            elif x.type_id == UnitTypeId.SWARMHOSTMP:
+                await self.do(x.move(far_townhall.position.random_on_distance(5)))
+            elif forces.closer_than(10, x.position).amount > self.alive_enemy_units().closer_than(10, x.position):
+                await self.do(x.attack(enemy_nearby.first))
+            else:
                 await self.do(x.move(far_townhall.position.random_on_distance(5)))
 
         actions = []
