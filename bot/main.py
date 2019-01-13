@@ -445,7 +445,7 @@ class MyBot(sc2.BotAI):
 
         def remove_if_exists(l, i):
             if i in l:
-                l.remove(item)
+                l.remove(i)
 
         can_afford = self.can_afford(u)
         if not can_afford.can_afford_minerals:
