@@ -10,7 +10,6 @@ from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
-
 class MyBot(sc2.BotAI):
     with open(Path(__file__).parent / "../botinfo.json") as f:
         NAME = json.load(f)["name"]
@@ -197,11 +196,13 @@ class MyBot(sc2.BotAI):
             self.production_order.append(UnitTypeId.ROACH)
         elif self.units(UnitTypeId.HYDRALISKDEN).ready.exists and self.units(UnitTypeId.HYDRALISK).amount < 20:
             self.production_order.append(UnitTypeId.HYDRALISK)
-        else:
+        elif self.units(UnitTypeId.ROACH).amount < 10:
             self.production_order.extend([UnitTypeId.HYDRALISK, UnitTypeId.ROACH])
+        else:
+            self.production_order.extend([UnitTypeId.HYDRALISK])
         # swarm host
         if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.SWARMHOSTMP) < 10:
-            if self.supply_used > 170:
+            if self.supply_used > 150:
                 self.production_order = [UnitTypeId.SWARMHOSTMP]
             else:
                 self.production_order.insert(0, UnitTypeId.SWARMHOSTMP)
@@ -325,7 +326,7 @@ class MyBot(sc2.BotAI):
             u: Unit = u
             abilities = await self.get_available_abilities(u)
             if AbilityId.BUILD_CREEPTUMOR_TUMOR in abilities:
-                t = u.position.random_on_distance(10)
+                t = u.position.towards_with_random_angle(self.enemy_start_locations[0], 10, math.pi)
                 if not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5:
                     actions.append(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
         await self.do_actions(actions)
@@ -454,6 +455,7 @@ class MyBot(sc2.BotAI):
             remove_if_exists(self.production_order, UnitTypeId.ROACH)
             remove_if_exists(self.production_order, UnitTypeId.HYDRALISK)
             remove_if_exists(self.production_order, UnitTypeId.MUTALISK)
+            remove_if_exists(self.production_order, UnitTypeId.SWARMHOSTMP)
         return can_afford
 
     def potential_scout_units(self):
