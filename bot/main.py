@@ -441,14 +441,19 @@ class MyBot(sc2.BotAI):
         if self.time - self.time_table[func.__name__] > seconds:
             await func()
 
-    def can_afford_or_change_production(self, u) -> bool:
+    def can_afford_or_change_production(self, u):
+
+        def remove_if_exists(l, i):
+            if i in l:
+                l.remove(item)
+
         can_afford = self.can_afford(u)
         if not can_afford.can_afford_minerals:
             self.production_order = []
         if not can_afford.can_afford_vespene:
-            self.production_order.remove(UnitTypeId.ROACH)
-            self.production_order.remove(UnitTypeId.HYDRALISK)
-            self.production_order.remove(UnitTypeId.MUTALISK)
+            remove_if_exists(self.production_order, UnitTypeId.ROACH)
+            remove_if_exists(self.production_order, UnitTypeId.HYDRALISK)
+            remove_if_exists(self.production_order, UnitTypeId.MUTALISK)
         return can_afford
 
     def potential_scout_units(self):
