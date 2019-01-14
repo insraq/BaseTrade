@@ -131,8 +131,8 @@ class MyBot(sc2.BotAI):
             for s in swarmhost:
                 s: Unit = s
                 abilities = await self.get_available_abilities(s)
-                if enemy_expansions.exists and AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
-                    closest_exp = enemy_expansions.closest_to(s.position)
+                if self.enemy_expansions.exists and AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
+                    closest_exp = self.enemy_expansions.closest_to(s.position)
                     sa.append(s.move(closest_exp.position.towards(self.game_info.map_center, 20), queue=True))
                     sa.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, closest_exp.position, queue=True))
                     sa.append(s.move(far_townhall.position.random_on_distance(5), queue=True))
@@ -221,7 +221,7 @@ class MyBot(sc2.BotAI):
                 not self.units(UnitTypeId.HIVE).exists and \
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
-                (self.supply_used > 100 and UnitTypeId.ROACHWARREN in self.build_order or \
+                (self.supply_used > 100 and UnitTypeId.ROACHWARREN in self.build_order or
                  self.townhalls.amount >= 3 and UnitTypeId.BANELINGNEST in self.build_order) and \
                 self.can_afford_or_change_production(UnitTypeId.LAIR):
             await self.do(self.hq.build(UnitTypeId.LAIR))
@@ -270,7 +270,7 @@ class MyBot(sc2.BotAI):
             await self.do(drone.build(UnitTypeId.EXTRACTOR, target))
         for a in self.units(UnitTypeId.EXTRACTOR).ready:
             if a.assigned_harvesters < a.ideal_harvesters:
-                w = self.workers.closer_than(20, a)
+                w: Units = self.workers.closer_than(20, a)
                 if w.exists:
                     await self.do(w.random.gather(a))
             if a.assigned_harvesters > a.ideal_harvesters:
@@ -630,8 +630,8 @@ class MyBot(sc2.BotAI):
             for d in self.units(UnitTypeId.DRONE).idle:
                 await self.do(d.gather(self.state.mineral_field.closest_to(d)))
 
-            if forces.idle.amount > 40 and self.time - self.last_enemy_time > 30:
-                for f in forces.closer_than(half_size, self.start_location):
+            if forces.idle.amount > 40 and forces.idle.amount > self.alive_enemy_units().amount:
+                for f in forces.idle.closer_than(half_size, self.start_location):
                     await self.do(f.attack(self.select_target()))
 
             if forces.idle.amount > 10:
