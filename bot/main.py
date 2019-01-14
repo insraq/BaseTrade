@@ -10,6 +10,7 @@ from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
+
 class MyBot(sc2.BotAI):
     with open(Path(__file__).parent / "../botinfo.json") as f:
         NAME = json.load(f)["name"]
@@ -33,6 +34,7 @@ class MyBot(sc2.BotAI):
         self.last_enemy_count = 0
         self.enemy_insight_frames = 0
         self.last_enemy_positions = []
+        self.enemy_expansions: Units = None
 
         self.build_order = []
         self.production_order = []
@@ -43,15 +45,6 @@ class MyBot(sc2.BotAI):
                   self.units(UnitTypeId.MUTALISK) | self.units(UnitTypeId.OVERSEER))
         half_size = self.start_location.distance_to(self.game_info.map_center)
         far_townhall = self.townhalls.closest_to(self.game_info.map_center)
-        enemy_expansions = self.known_enemy_structures.of_type({
-            UnitTypeId.COMMANDCENTER,
-            UnitTypeId.NEXUS,
-            UnitTypeId.HATCHERY,
-            UnitTypeId.LAIR,
-            UnitTypeId.HIVE,
-            UnitTypeId.ORBITALCOMMAND,
-            UnitTypeId.PLANETARYFORTRESS
-        })
 
         if self.enemy_race == Race.Terran:
             self.build_order = [
@@ -71,6 +64,8 @@ class MyBot(sc2.BotAI):
         self.production_order = []
         self.calc_resource_list()
         self.calc_expansion_loc()
+        # enemy info
+        self.calc_enemy_info()
 
         # supply_cap does not include overload that is being built
         est_supply_cap = (self.count_unit(UnitTypeId.OVERLORD)) * 8 + self.townhalls.ready.amount * 6
@@ -84,9 +79,6 @@ class MyBot(sc2.BotAI):
 
         if build_overlord and est_supply_cap <= 200:
             await self.train(UnitTypeId.OVERLORD)
-
-        # enemy info
-        self.calc_enemy_info()
 
         # attacks
         for x in self.units_attacked:
@@ -400,6 +392,15 @@ class MyBot(sc2.BotAI):
     def calc_enemy_info(self):
         self.last_enemy_count = 0
         self.last_enemy_positions = []
+        self.enemy_expansions = self.known_enemy_structures.of_type({
+            UnitTypeId.COMMANDCENTER,
+            UnitTypeId.NEXUS,
+            UnitTypeId.HATCHERY,
+            UnitTypeId.LAIR,
+            UnitTypeId.HIVE,
+            UnitTypeId.ORBITALCOMMAND,
+            UnitTypeId.PLANETARYFORTRESS
+        })
         has_enemy = False
         for t in self.units.structure:
             t: Unit = t
@@ -637,7 +638,10 @@ class MyBot(sc2.BotAI):
                 for f in forces.idle.random_group_of(
                         10 - min(forces.closer_than(half_size, self.enemy_start_locations[0]).amount, 10)):
                     f: Unit = f
-                    await self.do(f.move(self.enemy_start_locations[0]))
+                    if self.enemy_expansions.exists:
+                        await self.do(f.move(self.enemy_expansions.closest_to(self.enemy_start_locations[0])))
+                    else:
+                        await self.do(f.move(self.enemy_start_locations[0]))
 
             marines = self.alive_enemy_units().of_type({UnitTypeId.MARINE})
             for t in self.townhalls.ready:
@@ -714,7 +718,10 @@ class MyBot(sc2.BotAI):
                 for f in forces.idle.random_group_of(
                         10 - min(forces.closer_than(half_size, self.enemy_start_locations[0]).amount, 10)):
                     f: Unit = f
-                    await self.do(f.move(self.enemy_start_locations[0]))
+                    if self.enemy_expansions.exists:
+                        await self.do(f.move(self.enemy_expansions.closest_to(self.enemy_start_locations[0])))
+                    else:
+                        await self.do(f.move(self.enemy_start_locations[0]))
 
             for t in self.townhalls.ready:
                 t: Unit = t
