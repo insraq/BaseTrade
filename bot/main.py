@@ -104,7 +104,7 @@ class MyBot(sc2.BotAI):
                         w: Unit = w
                         await self.do(w.attack(enemy_nearby.first))
             elif x.type_id == UnitTypeId.HATCHERY:
-                if x.build_progress < 1:
+                if x.build_progress < 1 and x.health_percentage < 0.1:
                     await self.do(x(AbilityId.CANCEL))
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
                 await self.do(x.move(far_townhall.position.random_on_distance(5)))
