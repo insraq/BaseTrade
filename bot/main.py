@@ -80,6 +80,14 @@ class MyBot(sc2.BotAI):
         if build_overlord and est_supply_cap <= 200:
             await self.train(UnitTypeId.OVERLORD)
 
+        # if i don't even have a townhall
+        if self.townhalls.amount <= 0:
+            for unit in self.units(UnitTypeId.DRONE) | self.units(UnitTypeId.QUEEN) | forces:
+                await self.do(unit.attack(self.enemy_start_locations[0]))
+            return
+        else:
+            self.hq = self.townhalls.closest_to(self.start_location)
+
         # attacks
         for x in self.units_attacked:
             workers_nearby = self.workers.closer_than(5, x.position).filter(lambda wk: not wk.is_attacking)
@@ -149,14 +157,6 @@ class MyBot(sc2.BotAI):
             await self.build(UnitTypeId.SPINECRAWLER,
                              near=self.townhalls.furthest_to(self.start_location).position,
                              random_alternative=False)
-
-        # last resort
-        if self.townhalls.amount <= 0:
-            for unit in self.units(UnitTypeId.DRONE) | self.units(UnitTypeId.QUEEN) | forces:
-                await self.do(unit.attack(self.enemy_start_locations[0]))
-            return
-        else:
-            self.hq = self.townhalls.closest_to(self.start_location)
 
         # expansions
         for t in self.townhalls.ready:
