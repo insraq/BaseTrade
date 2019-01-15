@@ -66,6 +66,7 @@ class MyBot(sc2.BotAI):
             UnitTypeId.HELLION,
             UnitTypeId.SUPPLYDEPOT,
             UnitTypeId.BARRACKS,
+            UnitTypeId.REFINERY,
         }).exists
 
         if is_terran:
@@ -189,17 +190,10 @@ class MyBot(sc2.BotAI):
 
         if (self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
                 UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) and self.count_unit(
-                UnitTypeId.DRONE) < 76:
+            UnitTypeId.DRONE) < 76:
             self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
-        # queen
-        if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
-                UnitTypeId.QUEEN not in self.production_order and \
-                self.townhalls.amount >= 3 and \
-                self.count_unit(UnitTypeId.QUEEN) <= self.townhalls.ready.amount:
-            await self.do(self.townhalls.ready.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
-            self.production_order.append(UnitTypeId.QUEEN)
         # roach and hydra
         if self.units(UnitTypeId.ROACHWARREN).ready.exists and not self.units(
                 UnitTypeId.HYDRALISKDEN).ready.exists and self.units(UnitTypeId.ROACH).amount < 10:
@@ -252,9 +246,9 @@ class MyBot(sc2.BotAI):
             await self.do(self.hq.build(UnitTypeId.HIVE))
 
         await self.call_every(self.scout_expansions, 2 * 60)
-        await self.call_every(self.make_overseer, 20)
         await self.call_every(self.scout_watchtower, 60)
         await self.fill_creep_tumor()
+        await self.make_overseer()
 
         # expansion
         if self.should_expand() and self.expansion_calculated:
@@ -319,6 +313,13 @@ class MyBot(sc2.BotAI):
             UnitTypeId.CREEPTUMORQUEEN,
         })
         creep_queen = self.units(UnitTypeId.QUEEN).find_by_tag(self.creep_queen_tag)
+        # make creep queen
+        if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
+                UnitTypeId.QUEEN not in self.production_order and \
+                self.townhalls.amount >= 3 and \
+                self.can_afford_or_change_production(UnitTypeId.QUEEN) and \
+                self.count_unit(UnitTypeId.QUEEN) <= self.townhalls.ready.amount:
+            await self.do(self.townhalls.ready.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
         if creep_queen is not None and creep_queen.is_idle:
             abilities = await self.get_available_abilities(creep_queen)
             if AbilityId.BUILD_CREEPTUMOR_QUEEN in abilities:
@@ -340,10 +341,11 @@ class MyBot(sc2.BotAI):
         await self.do_actions(actions)
 
     async def inject_larva(self, townhall: Unit):
-        if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and townhall.is_ready and townhall.noqueue:
-            if self.units(UnitTypeId.QUEEN).closer_than(10, townhall.position).amount == 0:
-                await self.do(townhall.train(UnitTypeId.QUEEN))
-                self.production_order.append(UnitTypeId.QUEEN)
+        if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
+                townhall.is_ready and townhall.noqueue and \
+                self.units(UnitTypeId.QUEEN).closer_than(10,townhall.position).amount == 0 and \
+                self.can_afford_or_change_production(UnitTypeId.QUEEN):
+            await self.do(townhall.train(UnitTypeId.QUEEN))
         queen_nearby = self.units(UnitTypeId.QUEEN).idle.closer_than(10, townhall.position)
         if queen_nearby.tags_not_in({self.creep_queen_tag}).amount > 0:
             queen = queen_nearby.tags_not_in({self.creep_queen_tag}).first
@@ -401,9 +403,13 @@ class MyBot(sc2.BotAI):
                     await self.build(b, near=p)
                     return
         if self.should_build(UnitTypeId.INFESTATIONPIT) and \
+                self.count_unit(UnitTypeId.HYDRALISK) >= 10 and \
                 self.units(UnitTypeId.LAIR).ready.exists and \
                 self.can_afford_or_change_production(UnitTypeId.INFESTATIONPIT):
             await self.build(UnitTypeId.INFESTATIONPIT, near=self.hq.position.random_on_distance(10))
+
+        if self.count_unit(UnitTypeId.EVOLUTIONCHAMBER) == 1 and self.supply_used > 100:
+            await self.build(UnitTypeId.EVOLUTIONCHAMBER, near=self.hq.position.random_on_distance(10))
 
     def should_build(self, b):
         return not self.units(b).exists and self.already_pending(b) == 0 and self.can_afford(b)
@@ -427,7 +433,9 @@ class MyBot(sc2.BotAI):
     def alive_enemy_units(self) -> Units:
         return self.known_enemy_units.exclude_type({
             UnitTypeId.OVERLORD,
-            UnitTypeId.OVERSEER
+            UnitTypeId.OVERSEER,
+            UnitTypeId.CREEPTUMOR,
+            UnitTypeId.CREEPTUMORBURROWED,
         }).filter(lambda u: u.health > 0)
 
     def calc_enemy_info(self):
@@ -468,7 +476,7 @@ class MyBot(sc2.BotAI):
             self.units_health[w.tag] = w.health
 
     async def produce_unit(self):
-        if UnitTypeId.QUEEN in self.production_order or self.should_expand() or self.supply_left == 0:
+        if self.should_expand() or self.supply_left == 0:
             return
         for u in self.production_order:
             await self.train(u)
@@ -513,9 +521,9 @@ class MyBot(sc2.BotAI):
             scout = s.random
             self.scout_units.add(scout.tag)
             locs = self.start_location.sort_by_distance(list(self.expansion_locs.keys()))
-            for p in locs:
+            for i, p in enumerate(locs):
                 if not self.is_visible(p):
-                    actions.append(scout.move(p, queue=True))
+                    actions.append(scout.move(p, queue=i > 0))
             await self.do_actions(actions)
             self.time_table["scout_expansions"] = self.time
 
@@ -532,10 +540,8 @@ class MyBot(sc2.BotAI):
 
     async def make_overseer(self):
         if self.units(UnitTypeId.LAIR).exists and \
-                self.units(UnitTypeId.OVERSEER).amount == 0 and \
-                self.can_afford(UnitTypeId.OVERSEER):
+                self.count_unit(UnitTypeId.OVERSEER) == 0:
             await self.do(self.units(UnitTypeId.OVERLORD).random(AbilityId.MORPH_OVERSEER))
-            self.time_table["make_overseer"] = self.time
 
     def need_worker_mineral(self):
         t = self.townhalls.ready.filter(lambda a: a.assigned_harvesters < a.ideal_harvesters)
