@@ -201,7 +201,8 @@ class MyBot(sc2.BotAI):
             await self.do(self.townhalls.ready.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
             self.production_order.append(UnitTypeId.QUEEN)
         # roach and hydra
-        if self.units(UnitTypeId.ROACHWARREN).ready.exists and not self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
+        if self.units(UnitTypeId.ROACHWARREN).ready.exists and not self.units(
+                UnitTypeId.HYDRALISKDEN).ready.exists and self.units(UnitTypeId.ROACH).amount < 10:
             self.production_order.append(UnitTypeId.ROACH)
         elif self.units(UnitTypeId.HYDRALISKDEN).ready.exists and self.units(UnitTypeId.HYDRALISK).amount < 20:
             self.production_order.append(UnitTypeId.HYDRALISK)
