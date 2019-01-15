@@ -40,13 +40,35 @@ class MyBot(sc2.BotAI):
         self.production_order = []
 
     async def on_step(self, iteration):
-        forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units) | self.units(UnitTypeId.BANELING) |
-                  self.units(UnitTypeId.HYDRALISK) | self.units(UnitTypeId.ROACH).tags_not_in(self.scout_units) |
-                  self.units(UnitTypeId.MUTALISK) | self.units(UnitTypeId.OVERSEER))
+
+        self.production_order = []
+        self.calc_resource_list()
+        self.calc_expansion_loc()
+        # enemy info
+        self.calc_enemy_info()
         half_size = self.start_location.distance_to(self.game_info.map_center)
         far_townhall = self.townhalls.closest_to(self.game_info.map_center)
 
-        if self.enemy_race == Race.Terran:
+        forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units) | self.units(UnitTypeId.BANELING) |
+                  self.units(UnitTypeId.HYDRALISK) | self.units(UnitTypeId.ROACH).tags_not_in(self.scout_units) |
+                  self.units(UnitTypeId.MUTALISK) | self.units(UnitTypeId.OVERSEER))
+
+        is_terran = self.enemy_race == Race.Terran or self.known_enemy_units.of_type({
+            UnitTypeId.ORBITALCOMMAND,
+            UnitTypeId.COMMANDCENTER,
+            UnitTypeId.PLANETARYFORTRESS,
+            UnitTypeId.SCV,
+            UnitTypeId.MARINE,
+            UnitTypeId.REAPER,
+            UnitTypeId.MARAUDER,
+            UnitTypeId.SIEGETANK,
+            UnitTypeId.CYCLONE,
+            UnitTypeId.HELLION,
+            UnitTypeId.SUPPLYDEPOT,
+            UnitTypeId.BARRACKS,
+        }).exists
+
+        if is_terran:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
                 UnitTypeId.BANELINGNEST,
@@ -60,12 +82,6 @@ class MyBot(sc2.BotAI):
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
-
-        self.production_order = []
-        self.calc_resource_list()
-        self.calc_expansion_loc()
-        # enemy info
-        self.calc_enemy_info()
 
         # supply_cap does not include overload that is being built
         est_supply_cap = (self.count_unit(UnitTypeId.OVERLORD)) * 8 + self.townhalls.ready.amount * 6
@@ -158,7 +174,7 @@ class MyBot(sc2.BotAI):
                              near=self.townhalls.furthest_to(self.start_location).position,
                              random_alternative=False)
 
-        # expansions
+        # economy
         for t in self.townhalls.ready:
             t: Unit = t
             excess_worker = self.workers.closer_than(10, t.position)
@@ -166,14 +182,15 @@ class MyBot(sc2.BotAI):
             if t.assigned_harvesters > t.ideal_harvesters and excess_worker.exists and m is not None:
                 await self.do(excess_worker.random.gather(m))
 
-            if (t.assigned_harvesters < t.ideal_harvesters or self.townhalls.ready.amount == 1) and \
-                    self.count_unit(UnitTypeId.DRONE) < 76:
-                self.production_order.append(UnitTypeId.DRONE)
-
             queen_nearby = await self.inject_larva(t)
 
             if self.units(UnitTypeId.QUEEN).find_by_tag(self.creep_queen_tag) is None and queen_nearby.amount > 1:
                 self.creep_queen_tag = queen_nearby[1].tag
+
+        if (self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
+                UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) and self.count_unit(
+                UnitTypeId.DRONE) < 76:
+            self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
         # queen
@@ -212,7 +229,7 @@ class MyBot(sc2.BotAI):
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
             if (self.townhalls.ready.amount == 2 and self.count_unit(UnitTypeId.BANELING) < 5) or \
                     (self.townhalls.ready.amount == 3 and self.count_unit(UnitTypeId.BANELING) < 10) or \
-                    (self.townhalls.ready.amount == 4 and self.count_unit(UnitTypeId.BANELING) < 20):
+                    (self.townhalls.ready.amount >= 4 and self.count_unit(UnitTypeId.BANELING) < 20):
                 await self.do(self.units(UnitTypeId.ZERGLING).closest_to(self.start_location)(
                     AbilityId.MORPHZERGLINGTOBANELING_BANELING))
 
@@ -300,7 +317,6 @@ class MyBot(sc2.BotAI):
             UnitTypeId.CREEPTUMORMISSILE,
             UnitTypeId.CREEPTUMORQUEEN,
         })
-        exp_points = list(self.expansion_locs.keys())
         creep_queen = self.units(UnitTypeId.QUEEN).find_by_tag(self.creep_queen_tag)
         if creep_queen is not None and creep_queen.is_idle:
             abilities = await self.get_available_abilities(creep_queen)
@@ -310,16 +326,15 @@ class MyBot(sc2.BotAI):
                     ct = creep_tumors.furthest_to(self.start_location).position.random_on_distance(10)
                     if ct.distance2_to(self.start_location) > t.distance2_to(self.start_location):
                         t = ct
-                if t.position.distance_to_closest(exp_points) > 5 and self.has_creep(
-                        t) and not creep_tumors.closer_than(10, t).exists:
+                if self.has_creep(t) and self.can_place_creep_tumor(t):
                     await self.do(creep_queen(AbilityId.BUILD_CREEPTUMOR_QUEEN, t))
         actions = []
         for u in self.units(UnitTypeId.CREEPTUMORBURROWED):
             u: Unit = u
             abilities = await self.get_available_abilities(u)
             if AbilityId.BUILD_CREEPTUMOR_TUMOR in abilities:
-                t = u.position.towards_with_random_angle(self.enemy_start_locations[0], 10, math.pi)
-                if not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5:
+                t = self.calc_creep_tumor_position(u)
+                if t is not None:
                     actions.append(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
         await self.do_actions(actions)
 
@@ -335,6 +350,31 @@ class MyBot(sc2.BotAI):
             if AbilityId.EFFECT_INJECTLARVA in abilities:
                 await self.do(queen(AbilityId.EFFECT_INJECTLARVA, townhall))
         return queen_nearby
+
+    def calc_creep_tumor_position(self, u: Unit):
+        for i in range(0, 5):
+            t = u.position.towards_with_random_angle(self.enemy_start_locations[0], 10, math.pi / 4)
+            if self.can_place_creep_tumor(t):
+                return t
+        for i in range(0, 5):
+            t = u.position.towards_with_random_angle(self.enemy_start_locations[0], 10, math.pi / 2)
+            if self.can_place_creep_tumor(t):
+                return t
+        for i in range(0, 5):
+            t = u.position.towards_with_random_angle(self.enemy_start_locations[0], 10, math.pi)
+            if self.can_place_creep_tumor(t):
+                return t
+        return None
+
+    def can_place_creep_tumor(self, t: Point2) -> bool:
+        creep_tumors = self.units.of_type({
+            UnitTypeId.CREEPTUMOR,
+            UnitTypeId.CREEPTUMORBURROWED,
+            UnitTypeId.CREEPTUMORMISSILE,
+            UnitTypeId.CREEPTUMORQUEEN,
+        })
+        exp_points = list(self.expansion_locs.keys())
+        return not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5
 
     async def upgrade_building(self):
         if self.workers.collecting.amount < 32:

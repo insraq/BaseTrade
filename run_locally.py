@@ -14,7 +14,7 @@ def main():
 
     run_game(maps.get("(2)DreamcatcherLE"), [
         Bot(race, MyBot()),
-        Computer(Race.Protoss, Difficulty.VeryHard)
+        Computer(Race.Random, Difficulty.VeryHard)
     ], realtime=False, step_time_limit=2.0, game_time_limit=(60 * 30), save_replay_as="test.SC2Replay")
 
 
