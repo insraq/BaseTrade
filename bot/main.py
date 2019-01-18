@@ -60,7 +60,8 @@ class MyBot(sc2.BotAI):
             return
         else:
             self.hq = self.townhalls.closest_to(self.start_location)
-            far_townhall = self.townhalls.closest_to(self.game_info.map_center)
+            far_townhall: Unit = self.townhalls.closest_to(self.game_info.map_center)
+            rally_point: Point2 = far_townhall.position.towards(self.game_info.map_center, 4)
 
         is_terran = self.enemy_race == Race.Terran or self.known_enemy_units.of_type({
             UnitTypeId.ORBITALCOMMAND,
@@ -107,6 +108,7 @@ class MyBot(sc2.BotAI):
             await self.train(UnitTypeId.OVERLORD)
 
         # attacks
+        actions = []
         for x in self.units_attacked:
             workers_nearby = self.workers.closer_than(5, x.position).filter(lambda wk: not wk.is_attacking)
             enemy_nearby = self.alive_enemy_units().closer_than(5, x.position)
@@ -115,24 +117,24 @@ class MyBot(sc2.BotAI):
             if x.type_id == UnitTypeId.DRONE:
                 another_townhall = self.townhalls.further_than(25, x.position)
                 if forces.amount > enemy_nearby.amount and another_townhall.exists and self.townhalls.ready.amount > 3:
-                    await self.do(x.move(another_townhall.first.position))
+                    actions.append(x.move(another_townhall.first.position))
                 elif workers_nearby.amount > 2:
-                    await self.do(x.attack(enemy_nearby.first))
+                    actions.append(x.attack(enemy_nearby.first))
                     for w in workers_nearby:
                         w: Unit = w
-                        await self.do(w.attack(enemy_nearby.first))
+                        if not w.is_attacking:
+                            actions.append(w.attack(enemy_nearby.first))
             elif x.is_structure:
                 if x.build_progress < 1 and x.health_percentage < 0.1:
-                    await self.do(x(AbilityId.CANCEL))
+                    actions.append(x(AbilityId.CANCEL))
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
-                await self.do(x.move(far_townhall.position.random_on_distance(5)))
+                actions.append(x.move())
             elif forces.closer_than(10, x.position).amount > self.alive_enemy_units().closer_than(10,
                                                                                                   x.position).amount:
-                await self.do(x.attack(enemy_nearby.first))
+                actions.append(x.attack(enemy_nearby.first))
             else:
-                await self.do(x.move(far_townhall.position.random_on_distance(5)))
+                actions.append(x.move(rally_point))
 
-        actions = []
         enemy_nearby = self.enemy_nearby()
         if enemy_nearby:
             for unit in forces:
@@ -150,7 +152,7 @@ class MyBot(sc2.BotAI):
             for unit in forces.further_than(10, far_townhall.position):
                 if not unit.is_moving and (not self.last_enemy_positions or unit.position.distance_to_closest(
                         self.last_enemy_positions) > 10):
-                    actions.append(unit.move(far_townhall.position.random_on_distance(5)))
+                    actions.append(unit.move(rally_point))
         swarmhost = self.units(UnitTypeId.SWARMHOSTMP).ready.idle
         sa = []
         if not enemy_nearby and swarmhost.amount >= 5:
@@ -161,7 +163,7 @@ class MyBot(sc2.BotAI):
                     closest_exp = self.enemy_expansions.closest_to(s.position)
                     sa.append(s.move(closest_exp.position.towards(self.game_info.map_center, 20), queue=True))
                     sa.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, closest_exp.position, queue=True))
-                    sa.append(s.move(far_townhall.position.random_on_distance(5), queue=True))
+                    sa.append(s.move(rally_point, queue=True))
         if len(sa) >= 15:
             actions.extend(sa)
         await self.do_actions(actions)
@@ -513,6 +515,8 @@ class MyBot(sc2.BotAI):
         return scouts
 
     async def scout_expansions(self):
+        if self.townhalls.amount <= 2:
+            return
         actions = []
         s = self.potential_scout_units()
         if s.exists:
@@ -526,7 +530,7 @@ class MyBot(sc2.BotAI):
             self.time_table["scout_expansions"] = self.time
 
     async def scout_watchtower(self):
-        if self.state.units(UnitTypeId.XELNAGATOWER).amount > 0:
+        if self.state.units(UnitTypeId.XELNAGATOWER).amount > 0 and self.townhalls.amount > 2:
             for x in self.state.units(UnitTypeId.XELNAGATOWER):
                 x: Unit = x
                 s = self.potential_scout_units()
@@ -620,9 +624,10 @@ class MyBot(sc2.BotAI):
                 for w in self.workers.closer_than(2.5, a):
                     await self.do(w.gather(self.state.mineral_field.closest_to(w)))
 
-            forces = self.units.of_type({UnitTypeId.ROACH, UnitTypeId.ZERGLING})
             for d in self.units(UnitTypeId.DRONE).idle:
                 await self.do(d.gather(self.state.mineral_field.closest_to(d)))
+
+            forces = self.units.of_type({UnitTypeId.ROACH, UnitTypeId.ZERGLING})
 
             if forces.idle.amount > 40 and forces.idle.amount > self.alive_enemy_units().amount:
                 for f in forces.idle.closer_than(half_size, self.start_location):
@@ -637,17 +642,10 @@ class MyBot(sc2.BotAI):
                     else:
                         await self.do(f.move(self.enemy_start_locations[0]))
 
-            marines = self.alive_enemy_units().of_type({UnitTypeId.MARINE})
             for t in self.townhalls.ready:
                 t: Unit = t
                 await self.inject_larva(t)
-                if marines.exists and marines.closest_distance_to(t) < 10:
-                    joint_forces = forces.idle | self.units(UnitTypeId.DRONE).closer_than(10, t.position)
-                    for j in joint_forces:
-                        j: Unit = j
-                        if not j.is_attacking:
-                            await self.do(j.attack(marines.random.position))
-                    return True
+
             return True
 
         return False
