@@ -47,11 +47,19 @@ class MyBot(sc2.BotAI):
         # enemy info
         self.calc_enemy_info()
         half_size = self.start_location.distance_to(self.game_info.map_center)
-        far_townhall = self.townhalls.closest_to(self.game_info.map_center)
 
         forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units) | self.units(UnitTypeId.BANELING) |
                   self.units(UnitTypeId.HYDRALISK) | self.units(UnitTypeId.ROACH).tags_not_in(self.scout_units) |
                   self.units(UnitTypeId.MUTALISK) | self.units(UnitTypeId.OVERSEER))
+
+        # if i don't even have a townhall
+        if not self.townhalls.exists:
+            for unit in self.units(UnitTypeId.DRONE) | self.units(UnitTypeId.QUEEN) | forces:
+                await self.do(unit.attack(self.enemy_start_locations[0]))
+            return
+        else:
+            self.hq = self.townhalls.closest_to(self.start_location)
+            far_townhall = self.townhalls.closest_to(self.game_info.map_center)
 
         is_terran = self.enemy_race == Race.Terran or self.known_enemy_units.of_type({
             UnitTypeId.ORBITALCOMMAND,
@@ -96,14 +104,6 @@ class MyBot(sc2.BotAI):
 
         if build_overlord and est_supply_cap <= 200:
             await self.train(UnitTypeId.OVERLORD)
-
-        # if i don't even have a townhall
-        if self.townhalls.amount <= 0:
-            for unit in self.units(UnitTypeId.DRONE) | self.units(UnitTypeId.QUEEN) | forces:
-                await self.do(unit.attack(self.enemy_start_locations[0]))
-            return
-        else:
-            self.hq = self.townhalls.closest_to(self.start_location)
 
         # attacks
         for x in self.units_attacked:
