@@ -216,7 +216,7 @@ class MyBot(sc2.BotAI):
                 self.production_order.insert(0, UnitTypeId.SWARMHOSTMP)
         # zerglings
         zergling_amount = self.units(UnitTypeId.ZERGLING).amount + 2 * self.already_pending(UnitTypeId.ZERGLING)
-        if self.townhalls.ready.amount == 1 and zergling_amount < 6:
+        if self.townhalls.ready.amount == 1 and zergling_amount < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
             self.production_order.insert(0, UnitTypeId.ZERGLING)
         elif zergling_amount < 12:
             self.production_order.append(UnitTypeId.ZERGLING)
@@ -523,7 +523,7 @@ class MyBot(sc2.BotAI):
         return scouts
 
     async def scout_expansions(self):
-        if self.townhalls.amount <= 2:
+        if self.townhalls.amount <= 2 and not self.units(UnitTypeId.SPINECRAWLER).ready.exists:
             return
         actions = []
         s = self.potential_scout_units()
@@ -538,7 +538,9 @@ class MyBot(sc2.BotAI):
             self.time_table["scout_expansions"] = self.time
 
     async def scout_watchtower(self):
-        if self.state.units(UnitTypeId.XELNAGATOWER).amount > 0 and self.townhalls.amount > 2:
+        if self.townhalls.amount <= 2 and not self.units(UnitTypeId.SPINECRAWLER).ready.exists:
+            return
+        if self.state.units(UnitTypeId.XELNAGATOWER).amount > 0:
             for x in self.state.units(UnitTypeId.XELNAGATOWER):
                 x: Unit = x
                 s = self.potential_scout_units()
