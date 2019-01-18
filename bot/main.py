@@ -18,10 +18,8 @@ class MyBot(sc2.BotAI):
     def __init__(self):
         super().__init__()
         self.last_scout_time = 0
-        self.expansion_calculated = False
         self.scout_units = set()
         self.resource_list: List[List] = None
-        self.expansion_locs = {}
         self.time_table = {}
         self.units_health = {}
         self.units_attacked: List[Unit] = []
@@ -39,11 +37,13 @@ class MyBot(sc2.BotAI):
         self.build_order = []
         self.production_order = []
 
+    def _prepare_first_step(self):
+        sc2.BotAI._prepare_first_step(self)
+        self.expansion_locations.keys()
+
     async def on_step(self, iteration):
 
         self.production_order = []
-        self.calc_resource_list()
-        self.calc_expansion_loc()
         # enemy info
         self.calc_enemy_info()
         half_size = self.start_location.distance_to(self.game_info.map_center)
@@ -190,8 +190,8 @@ class MyBot(sc2.BotAI):
                 self.creep_queen_tag = queen_nearby[1].tag
 
         if (self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
-                UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) and self.count_unit(
-            UnitTypeId.DRONE) < 76:
+                UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) \
+                and self.count_unit(UnitTypeId.DRONE) < 76:
             self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
@@ -252,19 +252,13 @@ class MyBot(sc2.BotAI):
         await self.make_overseer()
 
         # expansion
-        if self.should_expand() and self.expansion_calculated:
-            empty_expansions = set()
-            for loc in self.expansion_locs:
-                loc: Point2 = loc
-                if self.townhalls.closer_than(self.EXPANSION_GAP_THRESHOLD, loc).amount == 0:
-                    empty_expansions.add(loc)
-            pos = self.start_location.closest(empty_expansions)
-            await self.build(UnitTypeId.HATCHERY, pos, max_distance=2, random_alternative=False, placement_step=1)
+        if self.should_expand() and self.can_afford_or_change_production(UnitTypeId.HATCHERY):
+            await self.expand_now()
 
         # first overlord scout
-        if self.expansion_calculated and self.units(UnitTypeId.OVERLORD).amount == 1:
+        if self.units(UnitTypeId.OVERLORD).amount == 1:
             o: Unit = self.units(UnitTypeId.OVERLORD).first
-            exps = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locs.keys()))
+            exps = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locations.keys()))
             await self.do_actions([
                 o.move(self.enemy_start_locations[0].towards(self.game_info.map_center, 18)),
                 o.move(exps[1].towards(self.game_info.map_center, 10), queue=True),
@@ -344,7 +338,7 @@ class MyBot(sc2.BotAI):
     async def inject_larva(self, townhall: Unit):
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
                 townhall.is_ready and townhall.noqueue and \
-                self.units(UnitTypeId.QUEEN).closer_than(10,townhall.position).amount == 0 and \
+                self.units(UnitTypeId.QUEEN).closer_than(10, townhall.position).amount == 0 and \
                 self.can_afford_or_change_production(UnitTypeId.QUEEN):
             await self.do(townhall.train(UnitTypeId.QUEEN))
         queen_nearby = self.units(UnitTypeId.QUEEN).idle.closer_than(10, townhall.position)
@@ -377,7 +371,7 @@ class MyBot(sc2.BotAI):
             UnitTypeId.CREEPTUMORMISSILE,
             UnitTypeId.CREEPTUMORQUEEN,
         })
-        exp_points = list(self.expansion_locs.keys())
+        exp_points = list(self.expansion_locations.keys())
         return not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5
 
     async def upgrade_building(self):
@@ -477,7 +471,7 @@ class MyBot(sc2.BotAI):
             self.units_health[w.tag] = w.health
 
     async def produce_unit(self):
-        if self.should_expand() or self.supply_left == 0:
+        if self.supply_left == 0:
             return
         for u in self.production_order:
             await self.train(u)
@@ -524,7 +518,7 @@ class MyBot(sc2.BotAI):
         if s.exists:
             scout = s.random
             self.scout_units.add(scout.tag)
-            locs = self.start_location.sort_by_distance(list(self.expansion_locs.keys()))
+            locs = self.start_location.sort_by_distance(list(self.expansion_locations.keys()))
             for i, p in enumerate(locs):
                 if not self.is_visible(p):
                     actions.append(scout.move(p, queue=i > 0))
@@ -593,57 +587,6 @@ class MyBot(sc2.BotAI):
     def is_location_safe(self, p: Point2):
         return not self.known_enemy_structures.of_type(
             {UnitTypeId.PHOTONCANNON, UnitTypeId.SPINECRAWLER, UnitTypeId.BUNKER}).closer_than(7, p).exists
-
-    def calc_resource_list(self):
-        if self.resource_list is not None:
-            return
-        RESOURCE_SPREAD_THRESHOLD = 144
-        all_resources = self.state.mineral_field | self.state.vespene_geyser
-        # Group nearby minerals together to form expansion locations
-        r_groups = []
-        for mf in all_resources:
-            mf_height = self.get_terrain_height(mf.position)
-            for g in r_groups:
-                if any(
-                        mf_height == self.get_terrain_height(p.position)
-                        and mf.position._distance_squared(p.position) < RESOURCE_SPREAD_THRESHOLD
-                        for p in g
-                ):
-                    g.append(mf)
-                    break
-            else:  # not found
-                r_groups.append([mf])
-        # Filter out bases with only one mineral field
-        self.resource_list = [g for g in r_groups if len(g) > 1]
-
-    def calc_expansion_loc(self):
-        if self.resource_list is None:
-            return
-        if len(self.resource_list) == 0:
-            self.expansion_calculated = True
-            return
-        # distance offsets from a gas geysir
-        offsets = [(x, y) for x in range(-9, 10) for y in range(-9, 10) if 75 >= x ** 2 + y ** 2 >= 49]
-        # for every resource group:
-        resources = self.resource_list.pop()
-        # possible expansion points
-        # resources[-1] is a gas geysir which always has (x.5, y.5) coordinates, just like an expansion
-        possible_points = (
-            Point2((offset[0] + resources[-1].position.x, offset[1] + resources[-1].position.y))
-            for offset in offsets
-        )
-        # filter out points that are too near
-        possible_points = [
-            point
-            for point in possible_points
-            if all(
-                point.distance_to(resource) >= (6 if resource in self.state.mineral_field else 7)
-                for resource in resources
-            )
-        ]
-        # choose best fitting point
-        result = min(possible_points, key=lambda p: sum(p.distance_to(resource) for resource in resources))
-        self.expansion_locs[result] = resources
 
     async def defend_early_rush(self) -> bool:
         half_size = self.start_location.distance_to(self.game_info.map_center)
