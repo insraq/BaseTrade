@@ -120,7 +120,7 @@ class MyBot(sc2.BotAI):
                     for w in workers_nearby:
                         w: Unit = w
                         await self.do(w.attack(enemy_nearby.first))
-            elif x.type_id == UnitTypeId.HATCHERY:
+            elif x.is_structure:
                 if x.build_progress < 1 and x.health_percentage < 0.1:
                     await self.do(x(AbilityId.CANCEL))
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
@@ -647,7 +647,7 @@ class MyBot(sc2.BotAI):
                                                                                                 self.start_location)
         enemy_units = self.alive_enemy_units().closer_than(half_size, self.start_location)
         if 0 < self.townhalls.ready.amount < 3 and (
-                proxy_barracks.exists or enemy_units.amount > min(self.units(UnitTypeId.ZERGLING).amount, 5)):
+                proxy_barracks.exists or enemy_units.amount > min(self.units(UnitTypeId.ZERGLING).amount, 3)):
 
             townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
             await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
