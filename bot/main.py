@@ -53,6 +53,7 @@ class MyBot(sc2.BotAI):
                   self.units(UnitTypeId.MUTALISK) | self.units(UnitTypeId.OVERSEER))
 
         # if i don't even have a townhall
+        # this has to be there because sometimes `self.townhalls` returns nothing even though there're clearly townhalls
         if not self.townhalls.exists:
             for unit in self.units(UnitTypeId.DRONE) | self.units(UnitTypeId.QUEEN) | forces:
                 await self.do(unit.attack(self.enemy_start_locations[0]))
@@ -647,7 +648,7 @@ class MyBot(sc2.BotAI):
                                                                                                 self.start_location)
         enemy_units = self.alive_enemy_units().closer_than(half_size, self.start_location)
         if 0 < self.townhalls.ready.amount < 3 and (
-                proxy_barracks.exists or enemy_units.amount > min(self.units(UnitTypeId.ZERGLING).amount, 3)):
+                proxy_barracks.exists or enemy_units.amount > max(enemy_units.amount, 5)):
 
             townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
             await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
