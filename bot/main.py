@@ -596,10 +596,14 @@ class MyBot(sc2.BotAI):
         half_size = self.start_location.distance_to(self.game_info.map_center)
         proxy_barracks = self.known_enemy_structures.of_type({UnitTypeId.BARRACKS}).closer_than(half_size,
                                                                                                 self.start_location)
-        enemy_units = self.alive_enemy_units().closer_than(half_size, self.start_location)
+        enemy_units = self.alive_enemy_units().exclude_type(
+            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
+        enemy_drones = self.alive_enemy_units().of_type(
+            {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
         if 0 < self.townhalls.ready.amount < 3 and (
-                proxy_barracks.exists or enemy_units.amount > min(self.count_unit(UnitTypeId.ZERGLING), 5)):
-
+                proxy_barracks.exists or
+                enemy_units.amount > min(self.count_unit(UnitTypeId.ZERGLING), 5) or
+                enemy_drones.amount > 5):
             townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
             await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
                                                                                townhall_to_defend.position))
