@@ -166,7 +166,7 @@ class MyBot(sc2.BotAI):
             actions.extend(sa)
         await self.do_actions(actions)
         # counter timing attack
-        if await self.defend_double_proxy_or_zergling_rush():
+        if await self.defend_early_rush():
             return
         if await self.defend_cannon_rush():
             return
@@ -510,9 +510,12 @@ class MyBot(sc2.BotAI):
         return can_afford
 
     def potential_scout_units(self):
-        scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
+        if self.supply_used > 190 and self.already_pending(UpgradeId.OVERLORDSPEED) == 1:
+            scouts = self.units(UnitTypeId.OVERLORD)
+        else:
+            scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
         if not scouts.exists:
-            scouts = self.units(UnitTypeId.ROACH).tags_not_in(self.scout_units)
+            scouts = self.units(UnitTypeId.OVERLORD)
         return scouts
 
     async def scout_expansions(self):
@@ -642,7 +645,7 @@ class MyBot(sc2.BotAI):
         result = min(possible_points, key=lambda p: sum(p.distance_to(resource) for resource in resources))
         self.expansion_locs[result] = resources
 
-    async def defend_double_proxy_or_zergling_rush(self) -> bool:
+    async def defend_early_rush(self) -> bool:
         half_size = self.start_location.distance_to(self.game_info.map_center)
         proxy_barracks = self.known_enemy_structures.of_type({UnitTypeId.BARRACKS}).closer_than(half_size,
                                                                                                 self.start_location)
