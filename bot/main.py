@@ -1,7 +1,7 @@
 import json
 import math
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Set
 
 import sc2
 from sc2 import Race
@@ -26,6 +26,7 @@ class MyBot(sc2.BotAI):
         self.creep_queen_tag = 0
         self.hq: Unit = None
         self.all_in = False
+        self.enemy_unit_history: Dict[UnitTypeId, Set[int]] = {}
 
         # enemy stats
         self.last_enemy_time = 0
@@ -255,7 +256,7 @@ class MyBot(sc2.BotAI):
 
         # expansion
         if self.should_expand() and self.can_afford_or_change_production(UnitTypeId.HATCHERY):
-            await self.expand_now()
+            await self.expand_now(None, 2)
 
         # first overlord scout
         if self.units(UnitTypeId.OVERLORD).amount == 1:
@@ -416,7 +417,8 @@ class MyBot(sc2.BotAI):
 
     def select_target(self):
         if self.known_enemy_structures.exists:
-            return self.known_enemy_structures.furthest_to(self.enemy_start_locations[0]).position
+            target = self.known_enemy_structures.furthest_to(self.enemy_start_locations[0])
+            return target.position
         return self.enemy_start_locations[0]
 
     def enemy_nearby(self):
@@ -455,6 +457,12 @@ class MyBot(sc2.BotAI):
             if threats.exists:
                 self.last_enemy_positions.append(threats.closest_to(t).position)
                 has_enemy = True
+        for e in self.known_enemy_units:
+            e: Unit = e
+            if e.type_id not in self.enemy_unit_history:
+                self.enemy_unit_history[e.type_id] = set()
+            tags = self.enemy_unit_history[e.type_id]
+            tags.add(e.tag)
 
         if has_enemy:
             self.enemy_insight_frames += 1
@@ -588,23 +596,38 @@ class MyBot(sc2.BotAI):
             total_ideal_harvesters += t.ideal_harvesters
         return full_workers and total_ideal_harvesters < 16 * 4
 
+    def enemy_unit_history_count(self, unit_type: UnitTypeId) -> int:
+        if unit_type not in self.enemy_unit_history:
+            return 0
+        return len(self.enemy_unit_history[unit_type])
+
     def is_location_safe(self, p: Point2):
         return not self.known_enemy_structures.of_type(
             {UnitTypeId.PHOTONCANNON, UnitTypeId.SPINECRAWLER, UnitTypeId.BUNKER}).closer_than(7, p).exists
 
     async def defend_early_rush(self) -> bool:
         half_size = self.start_location.distance_to(self.game_info.map_center)
-        proxy_barracks = self.known_enemy_structures.of_type({UnitTypeId.BARRACKS}).closer_than(half_size,
-                                                                                                self.start_location)
+        proxy_barracks = self.known_enemy_structures. \
+            of_type({UnitTypeId.BARRACKS}).closer_than(half_size, self.start_location)
         enemy_units = self.alive_enemy_units().exclude_type(
             {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
         enemy_drones = self.alive_enemy_units().of_type(
             {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
+        townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
+        early_enemy_unit_count = self.enemy_unit_history_count(UnitTypeId.ZERGLING) + \
+                                 self.enemy_unit_history_count(UnitTypeId.MARINE) + \
+                                 self.enemy_unit_history_count(UnitTypeId.ZEALOT)
+        if 0 < self.townhalls.ready.amount < 3 and \
+                early_enemy_unit_count > 11 and \
+                self.units(UnitTypeId.SPAWNINGPOOL).ready and \
+                self.count_unit(UnitTypeId.SPINECRAWLER) <= 2:
+            await self.build(UnitTypeId.SPINECRAWLER,
+                             near=townhall_to_defend.position.towards(self.game_info.map_center, 5),
+                             random_alternative=False)
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or
                 enemy_units.amount > min(self.count_unit(UnitTypeId.ZERGLING), 5) or
                 enemy_drones.amount > 5):
-            townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
             await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
                                                                                townhall_to_defend.position))
 
