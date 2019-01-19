@@ -185,11 +185,15 @@ class MyBot(sc2.BotAI):
             m = self.need_worker_mineral()
             if t.assigned_harvesters > t.ideal_harvesters and excess_worker.exists and m is not None:
                 await self.do(excess_worker.random.gather(m))
-
             queen_nearby = await self.inject_larva(t)
-
             if self.units(UnitTypeId.QUEEN).find_by_tag(self.creep_queen_tag) is None and queen_nearby.amount > 1:
                 self.creep_queen_tag = queen_nearby[1].tag
+            if self.townhalls.amount >= 3:
+                if not self.units(UnitTypeId.SPORECRAWLER).closer_than(10, t.position).exists and \
+                        self.already_pending(UnitTypeId.SPORECRAWLER) == 0:
+                    await self.build(UnitTypeId.SPORECRAWLER,
+                                     near=t.position.towards(self.state.mineral_field.closest_to(t).position, 3),
+                                     random_alternative=False)
 
         if (self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
                 UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) \
@@ -197,7 +201,7 @@ class MyBot(sc2.BotAI):
             if forces.amount > self.last_enemy_count:
                 self.production_order.append(UnitTypeId.DRONE)
             else:
-                self.production_order.append(UnitTypeId.ZERGLING)
+                self.production_order.extend([UnitTypeId.HYDRALISK, UnitTypeId.ROACH, UnitTypeId.ZERGLING])
 
         # production queue
         # roach and hydra
@@ -470,8 +474,7 @@ class MyBot(sc2.BotAI):
             e: Unit = e
             if e.type_id not in self.enemy_unit_history:
                 self.enemy_unit_history[e.type_id] = set()
-            tags = self.enemy_unit_history[e.type_id]
-            tags.add(e.tag)
+            self.enemy_unit_history[e.type_id].add(e.tag)
 
         if has_enemy:
             self.enemy_insight_frames += 1
@@ -554,7 +557,7 @@ class MyBot(sc2.BotAI):
                 x: Unit = x
                 s = self.potential_scout_units()
                 scouts = self.units.of_type({UnitTypeId.ZERGLING, UnitTypeId.OVERLORD})
-                if scouts.exists and not scouts.closest_distance_to(x.position) > 2 and s.exists:
+                if scouts.exists and scouts.closest_distance_to(x.position) > 2 and s.exists:
                     scout = s.random
                     self.scout_units.add(scout.tag)
                     await self.do(scout.move(x.position))
@@ -629,7 +632,7 @@ class MyBot(sc2.BotAI):
         early_enemy_unit_count = self.enemy_unit_history_count(UnitTypeId.ZERGLING) + self.enemy_unit_history_count(
             UnitTypeId.MARINE) + self.enemy_unit_history_count(UnitTypeId.ZEALOT) + self.enemy_unit_history_count(
             UnitTypeId.BANELING) + self.enemy_unit_history_count(UnitTypeId.REAPER)
-        if 0 < self.townhalls.ready.amount < 3 and \
+        if 1 < self.townhalls.ready.amount < 3 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
                 self.count_unit(UnitTypeId.SPINECRAWLER) <= min(early_enemy_unit_count / 4, 4):
             await self.build(UnitTypeId.SPINECRAWLER,
