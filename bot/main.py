@@ -623,7 +623,8 @@ class MyBot(sc2.BotAI):
             {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
         townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
         early_enemy_unit_count = self.enemy_unit_history_count(UnitTypeId.ZERGLING) + self.enemy_unit_history_count(
-            UnitTypeId.MARINE) + self.enemy_unit_history_count(UnitTypeId.ZEALOT)
+            UnitTypeId.MARINE) + self.enemy_unit_history_count(UnitTypeId.ZEALOT) + self.enemy_unit_history_count(
+            UnitTypeId.BANELING) + self.enemy_unit_history_count(UnitTypeId.REAPER)
         if 0 < self.townhalls.ready.amount < 3 and \
                 early_enemy_unit_count > 11 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
