@@ -1,7 +1,7 @@
 import json
 import math
 from pathlib import Path
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional
 
 import sc2
 from sc2 import Race
@@ -51,6 +51,7 @@ class MyBot(sc2.BotAI):
         forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units) | self.units(UnitTypeId.BANELING) |
                   self.units(UnitTypeId.HYDRALISK) | self.units(UnitTypeId.ROACH).tags_not_in(self.scout_units) |
                   self.units(UnitTypeId.MUTALISK) | self.units(UnitTypeId.OVERSEER))
+        half_size = self.start_location.distance_to(self.game_info.map_center)
 
         # if i don't even have a townhall
         # this has to be there because sometimes `self.townhalls` returns nothing even though there're clearly townhalls
@@ -139,7 +140,15 @@ class MyBot(sc2.BotAI):
         if enemy_nearby:
             for unit in forces:
                 unit: Unit = unit
-                actions.append(unit.attack(enemy_nearby.position))
+                # fight within spinecrawler
+                t = self.target_position(unit)
+                if t is not None and t.distance_to(self.start_location) > half_size:
+                    continue
+                if self.units(UnitTypeId.SPINECRAWLER).ready.exists and \
+                        self.units(UnitTypeId.SPINECRAWLER).closest_distance_to(unit.position) < 15:
+                    actions.append(unit.move(self.units(UnitTypeId.SPINECRAWLER).closest_to(unit.position)))
+                else:
+                    actions.append(unit.attack(enemy_nearby.position))
             for unit in self.units(UnitTypeId.SWARMHOSTMP).ready:
                 abilities = (await self.get_available_abilities([unit]))[0]
                 if AbilityId.EFFECT_SPAWNLOCUSTS in abilities and enemy_nearby.position.distance_to(unit.position) < 10:
@@ -198,7 +207,7 @@ class MyBot(sc2.BotAI):
         if (self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
                 UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) \
                 and self.count_unit(UnitTypeId.DRONE) < 76:
-            if forces.amount > self.last_enemy_count:
+            if forces.amount >= self.last_enemy_count or self.townhalls.amount < 2:
                 self.production_order.append(UnitTypeId.DRONE)
             else:
                 self.production_order.extend([UnitTypeId.HYDRALISK, UnitTypeId.ROACH, UnitTypeId.ZERGLING])
@@ -620,6 +629,17 @@ class MyBot(sc2.BotAI):
         return not self.known_enemy_structures.of_type(
             {UnitTypeId.PHOTONCANNON, UnitTypeId.SPINECRAWLER, UnitTypeId.BUNKER}).closer_than(7, p).exists
 
+    def target_position(self, unit: Unit) -> Optional[Point2]:
+        tag_or_pos = unit.order_target
+        if isinstance(tag_or_pos, int):
+            unit = self.state.units.find_by_tag(tag_or_pos)
+            target = unit.position if unit else None
+        elif isinstance(tag_or_pos, Point2):
+            target = tag_or_pos
+        else:
+            target = None
+        return target
+
     async def defend_early_rush(self) -> bool:
         half_size = self.start_location.distance_to(self.game_info.map_center)
         proxy_barracks = self.known_enemy_structures. \
@@ -632,9 +652,10 @@ class MyBot(sc2.BotAI):
         early_enemy_unit_count = self.enemy_unit_history_count(UnitTypeId.ZERGLING) + self.enemy_unit_history_count(
             UnitTypeId.MARINE) + self.enemy_unit_history_count(UnitTypeId.ZEALOT) + self.enemy_unit_history_count(
             UnitTypeId.BANELING) + self.enemy_unit_history_count(UnitTypeId.REAPER)
+        # build spinecrawlers
         if 1 < self.townhalls.ready.amount < 3 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
-                self.count_unit(UnitTypeId.SPINECRAWLER) <= min(early_enemy_unit_count / 4, 4):
+                self.count_unit(UnitTypeId.SPINECRAWLER) <= min(early_enemy_unit_count / 6, 2):
             await self.build(UnitTypeId.SPINECRAWLER,
                              near=townhall_to_defend.position.towards(self.game_info.map_center, 4),
                              random_alternative=False)
