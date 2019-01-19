@@ -175,7 +175,7 @@ class MyBot(sc2.BotAI):
 
         if self.count_unit(UnitTypeId.SPINECRAWLER) <= 0 and self.townhalls.ready.amount > 1:
             await self.build(UnitTypeId.SPINECRAWLER,
-                             near=self.townhalls.furthest_to(self.start_location).position,
+                             near=rally_point,
                              random_alternative=False)
 
         # economy
@@ -193,8 +193,11 @@ class MyBot(sc2.BotAI):
 
         if (self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
                 UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) \
-                and self.count_unit(UnitTypeId.DRONE) < 76 and forces.amount > self.last_enemy_count:
-            self.production_order.append(UnitTypeId.DRONE)
+                and self.count_unit(UnitTypeId.DRONE) < 76:
+            if forces.amount > self.last_enemy_count:
+                self.production_order.append(UnitTypeId.DRONE)
+            else:
+                self.production_order.append(UnitTypeId.ZERGLING)
 
         # production queue
         # roach and hydra
@@ -627,11 +630,10 @@ class MyBot(sc2.BotAI):
             UnitTypeId.MARINE) + self.enemy_unit_history_count(UnitTypeId.ZEALOT) + self.enemy_unit_history_count(
             UnitTypeId.BANELING) + self.enemy_unit_history_count(UnitTypeId.REAPER)
         if 0 < self.townhalls.ready.amount < 3 and \
-                early_enemy_unit_count > 11 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
-                self.count_unit(UnitTypeId.SPINECRAWLER) <= 2:
+                self.count_unit(UnitTypeId.SPINECRAWLER) <= min(early_enemy_unit_count / 4, 4):
             await self.build(UnitTypeId.SPINECRAWLER,
-                             near=townhall_to_defend.position.towards(self.game_info.map_center, 5),
+                             near=townhall_to_defend.position.towards(self.game_info.map_center, 4),
                              random_alternative=False)
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or
@@ -651,7 +653,7 @@ class MyBot(sc2.BotAI):
                 await self.train(UnitTypeId.ZERGLING)
                 if self.count_unit(UnitTypeId.SPINECRAWLER) <= 2:
                     await self.build(UnitTypeId.SPINECRAWLER,
-                                     near=townhall_to_defend.position.towards(self.game_info.map_center, 5),
+                                     near=townhall_to_defend.position.towards(self.game_info.map_center, 4),
                                      random_alternative=False)
             else:
                 await self.train(UnitTypeId.DRONE)
