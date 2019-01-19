@@ -521,7 +521,7 @@ class MyBot(sc2.BotAI):
 
     def potential_scout_units(self):
         if self.supply_used > 190 and self.already_pending(UpgradeId.OVERLORDSPEED) == 1:
-            scouts = self.units(UnitTypeId.OVERLORD)
+            scouts = self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units)
         else:
             scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
         if not scouts.exists:
@@ -550,7 +550,8 @@ class MyBot(sc2.BotAI):
             for x in self.state.units(UnitTypeId.XELNAGATOWER):
                 x: Unit = x
                 s = self.potential_scout_units()
-                if not self.units(UnitTypeId.ZERGLING).closest_distance_to(x.position) > 2 and s.exists:
+                scouts = self.units.of_type({UnitTypeId.ZERGLING, UnitTypeId.OVERLORD})
+                if scouts.exists and not scouts.closest_distance_to(x.position) > 2 and s.exists:
                     scout = s.random
                     self.scout_units.add(scout.tag)
                     await self.do(scout.move(x.position))
