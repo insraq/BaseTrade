@@ -145,6 +145,7 @@ class MyBot(sc2.BotAI):
                 if t is not None and t.distance_to(self.start_location) > half_size:
                     continue
                 if self.units(UnitTypeId.SPINECRAWLER).ready.exists and \
+                        self.units(UnitTypeId.SPINECRAWLER).closest_distance_to(rally_point) < 15 and \
                         self.units(UnitTypeId.SPINECRAWLER).closest_distance_to(unit.position) < 15:
                     actions.append(unit.move(self.units(UnitTypeId.SPINECRAWLER).closest_to(unit.position)))
                 else:
@@ -170,7 +171,7 @@ class MyBot(sc2.BotAI):
                 abilities = (await self.get_available_abilities([s]))[0]
                 if self.enemy_expansions.exists and AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
                     closest_exp = self.enemy_expansions.closest_to(s.position)
-                    sa.append(s.move(closest_exp.position.towards(self.game_info.map_center, 20), queue=True))
+                    sa.append(s.move(closest_exp.position.towards(self.start_location, 20), queue=True))
                     sa.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, closest_exp.position, queue=True))
                     sa.append(s.move(rally_point, queue=True))
         if len(sa) >= 15:
@@ -295,8 +296,7 @@ class MyBot(sc2.BotAI):
         if self.should_build_extractor():
             drone = self.workers.random
             target = self.state.vespene_geyser.closest_to(drone.position)
-            if self.townhalls.ready.closest_distance_to(target.position) < 10 and \
-                    target.type_id != UnitTypeId.EXTRACTOR:
+            if self.townhalls.ready.closest_distance_to(target.position) < 10:
                 await self.do(drone.build(UnitTypeId.EXTRACTOR, target))
         for a in self.units(UnitTypeId.EXTRACTOR).ready:
             if a.assigned_harvesters < a.ideal_harvesters:
@@ -551,7 +551,8 @@ class MyBot(sc2.BotAI):
         if s.exists:
             scout = s.random
             self.scout_units.add(scout.tag)
-            locs = self.start_location.sort_by_distance(list(self.expansion_locations.keys()))
+            locs = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locations.keys()))
+            locs.reverse()
             for i, p in enumerate(locs):
                 if not self.is_visible(p):
                     actions.append(scout.move(p, queue=i > 0))
@@ -569,7 +570,10 @@ class MyBot(sc2.BotAI):
                 if scouts.exists and scouts.closest_distance_to(x.position) > 2 and s.exists:
                     scout = s.random
                     self.scout_units.add(scout.tag)
-                    await self.do(scout.move(x.position))
+                    await self.do_actions([
+                        scout.move(x.position),
+                        scout.hold_position(queue=True)
+                    ])
                     self.time_table["scout_watchtower"] = self.time
 
     async def make_overseer(self):
@@ -588,7 +592,7 @@ class MyBot(sc2.BotAI):
     def should_build_extractor(self):
         if self.vespene - self.minerals > 100:
             return False
-        if self.already_pending(UnitTypeId.EXTRACTOR) > 0:
+        if self.already_pending(UnitTypeId.EXTRACTOR, all_units=True) > 0:
             return False
         if not self.units(UnitTypeId.SPAWNINGPOOL).exists:
             return False
