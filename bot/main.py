@@ -199,7 +199,7 @@ class MyBot(sc2.BotAI):
             return
 
         # build at least one spinecrawler
-        if self.count_unit(UnitTypeId.SPINECRAWLER) <= 0 and self.townhalls.ready.amount > 1:
+        if self.count_unit(UnitTypeId.SPINECRAWLER) <= 1 and self.townhalls.ready.amount > 1:
             await self.build(UnitTypeId.SPINECRAWLER,
                              near=rally_point.towards_with_random_angle(self.game_info.map_center, 2),
                              random_alternative=False)
