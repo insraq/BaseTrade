@@ -646,9 +646,8 @@ class MyBot(sc2.BotAI):
     def enemy_unit_history_count(self, unit_types: List[UnitTypeId]) -> int:
         count = 0
         for unit_type in unit_types:
-            if unit_type not in self.enemy_unit_history:
-                count += 0
-            count += len(self.enemy_unit_history[unit_type])
+            if unit_type in self.enemy_unit_history:
+                count += len(self.enemy_unit_history[unit_type])
         return count
 
     def is_location_safe(self, p: Point2):
