@@ -199,7 +199,7 @@ class MyBot(sc2.BotAI):
             return
 
         # build at least one spinecrawler
-        if self.count_unit(UnitTypeId.SPINECRAWLER) <= 1 and self.townhalls.ready.amount > 1:
+        if self.count_unit(UnitTypeId.SPINECRAWLER) <= 0 and self.townhalls.ready.amount > 1:
             await self.build(UnitTypeId.SPINECRAWLER,
                              near=rally_point.towards_with_random_angle(self.game_info.map_center, 2),
                              random_alternative=False)
@@ -643,10 +643,13 @@ class MyBot(sc2.BotAI):
             total_ideal_harvesters += t.ideal_harvesters
         return full_workers and total_ideal_harvesters < 16 * 4
 
-    def enemy_unit_history_count(self, unit_type: UnitTypeId) -> int:
-        if unit_type not in self.enemy_unit_history:
-            return 0
-        return len(self.enemy_unit_history[unit_type])
+    def enemy_unit_history_count(self, unit_types: List[UnitTypeId]) -> int:
+        count = 0
+        for unit_type in unit_types:
+            if unit_type not in self.enemy_unit_history:
+                count += 0
+            count += len(self.enemy_unit_history[unit_type])
+        return count
 
     def is_location_safe(self, p: Point2):
         return not self.known_enemy_structures.of_type(
@@ -661,13 +664,13 @@ class MyBot(sc2.BotAI):
         enemy_drones = self.alive_enemy_units().of_type(
             {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
         townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
-        early_enemy_unit_count = self.enemy_unit_history_count(UnitTypeId.ZERGLING) + self.enemy_unit_history_count(
-            UnitTypeId.MARINE) + self.enemy_unit_history_count(UnitTypeId.ZEALOT) + self.enemy_unit_history_count(
-            UnitTypeId.BANELING) + self.enemy_unit_history_count(UnitTypeId.REAPER)
+        early_enemy_unit_count = 0.5 * self.enemy_unit_history_count(
+            [UnitTypeId.ZERGLING]) + self.enemy_unit_history_count(
+            [UnitTypeId.MARINE, UnitTypeId.ZEALOT, UnitTypeId.ADEPT, UnitTypeId.BANELING, UnitTypeId.REAPER])
         # build spinecrawlers
         if 1 < self.townhalls.ready.amount < 3 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
-                self.count_unit(UnitTypeId.SPINECRAWLER) <= min(early_enemy_unit_count / 6, 2):
+                self.count_unit(UnitTypeId.SPINECRAWLER) <= min(early_enemy_unit_count / 3, 2):
             await self.build(UnitTypeId.SPINECRAWLER,
                              near=townhall_to_defend.position.towards_with_random_angle(self.game_info.map_center, 6),
                              random_alternative=False)
