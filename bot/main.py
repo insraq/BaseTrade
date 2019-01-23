@@ -29,6 +29,7 @@ class MyBot(sc2.BotAI):
         self.hq: Unit = None
         self.all_in = False
         self.enemy_unit_history: Dict[UnitTypeId, Set[int]] = {}
+        self.first_overlord_tag = 0
 
         # enemy stats
         self.last_enemy_time = 0
@@ -88,6 +89,16 @@ class MyBot(sc2.BotAI):
             UnitTypeId.SUPPLYDEPOT,
             UnitTypeId.BARRACKS,
             UnitTypeId.REFINERY,
+        }).exists
+
+        is_zerg = self.enemy_race == Race.Zerg or self.known_enemy_units.of_type({
+            UnitTypeId.HATCHERY,
+            UnitTypeId.DRONE,
+            UnitTypeId.EXTRACTOR,
+            UnitTypeId.OVERLORD,
+            UnitTypeId.QUEEN,
+            UnitTypeId.REAPER,
+            UnitTypeId.ZERGLING,
         }).exists
 
         if is_terran:
@@ -183,6 +194,8 @@ class MyBot(sc2.BotAI):
                     actions.append(x(AbilityId.CANCEL))
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
                 actions.append(x.move(rally_point))
+            elif x.tag == self.first_overlord_tag:
+                actions.append(x.move(self.game_info.map_center))
             if not x.is_idle:
                 continue
             if forces.closer_than(10, x.position).amount > self.alive_enemy_units().closer_than(10,
@@ -198,13 +211,12 @@ class MyBot(sc2.BotAI):
         if await self.defend_cannon_rush():
             return
 
-        # build at least one spinecrawler
-        if self.count_unit(UnitTypeId.SPINECRAWLER) <= 0 and \
+        # build spinecrawlers
+        number_to_build = 2 if is_zerg else 1
+        if self.count_unit(UnitTypeId.SPINECRAWLER) < number_to_build and \
                 self.townhalls.ready.amount > 1 and \
                 self.can_afford_or_change_production(UnitTypeId.SPINECRAWLER):
-            await self.build(UnitTypeId.SPINECRAWLER,
-                             near=rally_point.towards_with_random_angle(self.game_info.map_center, 2),
-                             random_alternative=False)
+            await self.build_spine_crawler()
 
         # economy
         for t in self.townhalls.ready:
@@ -294,11 +306,11 @@ class MyBot(sc2.BotAI):
         # first overlord scout
         if self.units(UnitTypeId.OVERLORD).amount == 1:
             o: Unit = self.units(UnitTypeId.OVERLORD).first
+            self.first_overlord_tag = o.tag
             exps = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locations.keys()))
             await self.do_actions([
                 o.move(self.enemy_start_locations[0].towards(self.game_info.map_center, 18)),
                 o.move(exps[1].towards(self.game_info.map_center, 10), queue=True),
-                o.move(self.game_info.map_center, queue=True)
             ])
 
         # second overlord scout
@@ -515,7 +527,7 @@ class MyBot(sc2.BotAI):
         self.units_attacked = []
         for w in self.units.filter(not_full_health):
             w: Unit = w
-            if w.tag in self.units_health and w.health > self.units_health[w.tag]:
+            if w.tag in self.units_health and w.health > self.units_health[w.tag] or w.tag not in self.units_health:
                 self.units_attacked.append(w)
             self.units_health[w.tag] = w.health
 
@@ -628,6 +640,21 @@ class MyBot(sc2.BotAI):
         else:
             return self.units(UnitTypeId.EXTRACTOR).amount < self.townhalls.ready.amount * 2
 
+    async def build_spine_crawler(self):
+        sc = self.units(UnitTypeId.SPINECRAWLER)
+        if sc.exists:
+            result = await self.build(UnitTypeId.SPINECRAWLER, sc.furthest_to(self.start_location).position, 4,
+                                      placement_step=1)
+        elif self.townhalls.exists:
+            result = await self.build(UnitTypeId.SPINECRAWLER,
+                                      self.townhalls.furthest_to(self.start_location).position.towards(
+                                          self.game_info.map_center, 6), 4, placement_step=1)
+        else:
+            result = await self.build(UnitTypeId.SPINECRAWLER,
+                                      self.start_location.towards(self.game_info.map_center, 6), 4,
+                                      placement_step=1)
+        return result
+
     def should_expand(self):
         if self.already_pending(UnitTypeId.HATCHERY) > 0:
             return False
@@ -672,16 +699,13 @@ class MyBot(sc2.BotAI):
         if 1 < self.townhalls.ready.amount < 3 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
                 self.count_unit(UnitTypeId.SPINECRAWLER) <= min(early_enemy_unit_count / 3, 2):
-            await self.build(UnitTypeId.SPINECRAWLER,
-                             near=townhall_to_defend.position.towards_with_random_angle(self.game_info.map_center, 6),
-                             random_alternative=False)
+            await self.build_spine_crawler()
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or
                 enemy_units.amount > min(self.count_unit(UnitTypeId.ZERGLING), 5) or
                 enemy_drones.amount > 5):
             await self.do(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
                                                                                townhall_to_defend.position))
-
             if self.units(UnitTypeId.ROACHWARREN).ready.exists:
                 await self.train(UnitTypeId.ROACH)
 
@@ -691,10 +715,7 @@ class MyBot(sc2.BotAI):
                 if AbilityId.RESEARCH_ZERGLINGMETABOLICBOOST in abilities:
                     await self.do(sp.first(AbilityId.RESEARCH_ZERGLINGMETABOLICBOOST))
                 elif self.count_unit(UnitTypeId.SPINECRAWLER) <= 2:
-                    await self.build(UnitTypeId.SPINECRAWLER,
-                                     near=townhall_to_defend.position.towards_with_random_angle(
-                                         self.game_info.map_center, 6),
-                                     random_alternative=False)
+                    await self.build_spine_crawler()
                 else:
                     await self.train(UnitTypeId.ZERGLING)
 
@@ -748,7 +769,7 @@ class MyBot(sc2.BotAI):
                 p: Point2 = self.townhalls.furthest_to(self.start_location).position.random_on_distance(3)
                 if self.is_location_safe(p):
                     await self.build(
-                        UnitTypeId.SPINECRAWLER,
+                        UnitTypeId.SPAWNINGPOOL,
                         sp.first.position,
                         random_alternative=False
                     )
