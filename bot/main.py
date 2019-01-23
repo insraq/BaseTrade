@@ -279,7 +279,7 @@ class MyBot(sc2.BotAI):
                 not self.units(UnitTypeId.HIVE).exists and \
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
-                (self.supply_used > 100 and UnitTypeId.ROACHWARREN in self.build_order or
+                (self.count_unit(UnitTypeId.ROACH) >= 10 and UnitTypeId.ROACHWARREN in self.build_order or
                  self.townhalls.amount >= 3 and UnitTypeId.BANELINGNEST in self.build_order) and \
                 self.can_afford_or_change_production(UnitTypeId.LAIR):
             await self.do(self.hq.build(UnitTypeId.LAIR))
@@ -321,14 +321,22 @@ class MyBot(sc2.BotAI):
         # extractor and gas gathering
         if self.should_build_extractor():
             drone = self.workers.random
-            target = self.state.vespene_geyser.closest_to(drone.position)
+            target = self.state.vespene_geyser.filter(lambda u: not u.is_mine).closest_to(drone.position)
             if self.townhalls.ready.closest_distance_to(target.position) < 10:
                 await self.do(drone.build(UnitTypeId.EXTRACTOR, target))
         for a in self.units(UnitTypeId.EXTRACTOR).ready:
+            a: Unit = a
+            if self.vespene - self.minerals > 100:
+                w: Units = self.workers.closer_than(2.5, a)
+                t: Unit = self.townhalls.closest_to(a.position)
+                if t.surplus_harvesters < 0 and t.distance_to(a) < 10 and w.exists:
+                    await self.do(w.first.gather(self.state.mineral_field.closest_to(w.first)))
+                    continue
             if a.assigned_harvesters < a.ideal_harvesters:
                 w: Units = self.workers.closer_than(20, a)
                 if w.exists:
                     await self.do(w.random.gather(a))
+                    continue
             if a.assigned_harvesters > a.ideal_harvesters:
                 for w in self.workers.closer_than(2.5, a):
                     await self.do(w.gather(self.state.mineral_field.closest_to(w)))
@@ -527,7 +535,7 @@ class MyBot(sc2.BotAI):
         self.units_attacked = []
         for w in self.units.filter(not_full_health):
             w: Unit = w
-            if w.tag in self.units_health and w.health > self.units_health[w.tag] or w.tag not in self.units_health:
+            if (w.tag in self.units_health and w.health > self.units_health[w.tag]) or w.tag not in self.units_health:
                 self.units_attacked.append(w)
             self.units_health[w.tag] = w.health
 
@@ -625,20 +633,18 @@ class MyBot(sc2.BotAI):
     def should_build_extractor(self):
         if self.vespene - self.minerals > 100:
             return False
-        if self.already_pending(UnitTypeId.EXTRACTOR, all_units=True) > 0:
-            return False
         if not self.units(UnitTypeId.SPAWNINGPOOL).exists:
-            return False
-        if self.townhalls.ready.amount < 2:
             return False
         if self.minerals - self.vespene > 500:
             return True
+        if self.townhalls.ready.amount < 2:
+            return False
         if self.townhalls.amount < 3:
-            return self.units(UnitTypeId.EXTRACTOR).amount == 0
-        if self.townhalls.amount < 5:
-            return self.units(UnitTypeId.EXTRACTOR).amount < self.townhalls.ready.amount * 2 - 2
+            return self.count_unit(UnitTypeId.EXTRACTOR) == 0
+        if self.townhalls.amount < 4:
+            return self.count_unit(UnitTypeId.EXTRACTOR) < self.townhalls.ready.amount * 2 - 2
         else:
-            return self.units(UnitTypeId.EXTRACTOR).amount < self.townhalls.ready.amount * 2
+            return self.count_unit(UnitTypeId.EXTRACTOR) < self.townhalls.ready.amount * 2
 
     async def build_spine_crawler(self):
         sc = self.units(UnitTypeId.SPINECRAWLER)
