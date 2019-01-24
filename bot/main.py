@@ -1,7 +1,7 @@
 import json
 import math
 from pathlib import Path
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Set
 
 import sc2
 from sc2 import Race
@@ -75,31 +75,14 @@ class MyBot(sc2.BotAI):
             far_townhall: Unit = self.townhalls.closest_to(self.game_info.map_center)
             rally_point: Point2 = far_townhall.position.towards(self.game_info.map_center, 4)
 
-        is_terran = self.enemy_race == Race.Terran or self.known_enemy_units.of_type({
-            UnitTypeId.ORBITALCOMMAND,
-            UnitTypeId.COMMANDCENTER,
-            UnitTypeId.PLANETARYFORTRESS,
-            UnitTypeId.SCV,
-            UnitTypeId.MARINE,
-            UnitTypeId.REAPER,
-            UnitTypeId.MARAUDER,
-            UnitTypeId.SIEGETANK,
-            UnitTypeId.CYCLONE,
-            UnitTypeId.HELLION,
-            UnitTypeId.SUPPLYDEPOT,
-            UnitTypeId.BARRACKS,
-            UnitTypeId.REFINERY,
-        }).exists
+        is_terran = self.enemy_race == Race.Terran or \
+                    (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Terran)
 
-        is_zerg = self.enemy_race == Race.Zerg or self.known_enemy_units.of_type({
-            UnitTypeId.HATCHERY,
-            UnitTypeId.DRONE,
-            UnitTypeId.EXTRACTOR,
-            UnitTypeId.OVERLORD,
-            UnitTypeId.QUEEN,
-            UnitTypeId.REAPER,
-            UnitTypeId.ZERGLING,
-        }).exists
+        is_zerg = self.enemy_race == Race.Zerg or \
+                    (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Zerg)
+
+        is_protoss = self.enemy_race == Race.Protoss or \
+                    (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Protoss)
 
         if is_terran:
             self.build_order = [
@@ -324,22 +307,25 @@ class MyBot(sc2.BotAI):
             target = self.state.vespene_geyser.filter(lambda u: not u.is_mine).closest_to(drone.position)
             if self.townhalls.ready.closest_distance_to(target.position) < 10:
                 await self.do(drone.build(UnitTypeId.EXTRACTOR, target))
+
+        actions = []
         for a in self.units(UnitTypeId.EXTRACTOR).ready:
             a: Unit = a
-            if self.vespene - self.minerals > 100:
+            if self.vespene - self.minerals > 200:
                 w: Units = self.workers.closer_than(2.5, a)
                 t: Unit = self.townhalls.closest_to(a.position)
-                if t.surplus_harvesters < 0 and t.distance_to(a) < 10 and w.exists:
-                    await self.do(w.first.gather(self.state.mineral_field.closest_to(w.first)))
-                    continue
-            if a.assigned_harvesters < a.ideal_harvesters:
+                if t.surplus_harvesters < 0 and t.distance_to(a) < 10 and w.exists and w.first.order_target == a.tag:
+                    actions.append(w.first.gather(self.state.mineral_field.closest_to(w.first)))
+            elif a.assigned_harvesters < a.ideal_harvesters:
                 w: Units = self.workers.closer_than(20, a)
                 if w.exists:
-                    await self.do(w.random.gather(a))
+                    actions.append(w.random.gather(a))
                     continue
-            if a.assigned_harvesters > a.ideal_harvesters:
+            elif a.assigned_harvesters > a.ideal_harvesters:
                 for w in self.workers.closer_than(2.5, a):
-                    await self.do(w.gather(self.state.mineral_field.closest_to(w)))
+                    if w.order_target == a.tag:
+                        actions.append(w.gather(self.state.mineral_field.closest_to(w)))
+        await self.do_actions(actions)
 
         # overlord speed
         if self.units(UnitTypeId.LAIR).ready.exists and \
