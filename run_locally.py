@@ -18,7 +18,8 @@ def main():
         Bot(race, MyBot()),
         # Bot(Race.Terran, ProxyRaxBot()),
         Computer(Race.Random, Difficulty.VeryHard),
-    ], realtime=False, step_time_limit=2.0, game_time_limit=(60 * 30), save_replay_as="test.SC2Replay")
+    ], realtime=False, step_time_limit={"time_limit": 2, "window_size": 10, "penalty": 10}, game_time_limit=(60 * 30),
+             save_replay_as="test.SC2Replay")
 
 
 if __name__ == '__main__':
