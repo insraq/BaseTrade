@@ -14,7 +14,7 @@ def main():
 
     race = Race[info["race"]]
 
-    run_game(maps.get("(2)RedShiftLE"), [
+    run_game(maps.get("(2)LostAndFoundLE"), [
         Bot(race, MyBot()),
         # Bot(Race.Terran, ProxyRaxBot()),
         Computer(Race.Random, Difficulty.VeryHard),

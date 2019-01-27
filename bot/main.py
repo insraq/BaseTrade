@@ -262,7 +262,7 @@ class MyBot(sc2.BotAI):
                 not self.units(UnitTypeId.HIVE).exists and \
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
-                (self.count_unit(UnitTypeId.ROACH) >= 10 and UnitTypeId.ROACHWARREN in self.build_order or
+                (self.count_unit(UnitTypeId.ROACH) > 0 and UnitTypeId.ROACHWARREN in self.build_order or
                  self.townhalls.amount >= 3 and UnitTypeId.BANELINGNEST in self.build_order) and \
                 self.can_afford_or_change_production(UnitTypeId.LAIR):
             await self.do(self.hq.build(UnitTypeId.LAIR))
@@ -476,12 +476,9 @@ class MyBot(sc2.BotAI):
         return None
 
     def alive_enemy_units(self) -> Units:
-        return self.known_enemy_units.exclude_type({
-            UnitTypeId.OVERLORD,
-            UnitTypeId.OVERSEER,
-            UnitTypeId.CREEPTUMOR,
-            UnitTypeId.CREEPTUMORBURROWED,
-        }).filter(lambda u: u.health > 0)
+        def alive_and_can_attack(u:Unit) -> bool:
+            return u.health > 0 and u.can_attack
+        return self.known_enemy_units.filter(alive_and_can_attack)
 
     def calc_enemy_info(self):
         self.last_enemy_count = 0
