@@ -1,7 +1,7 @@
 import json
 import math
 from pathlib import Path
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Union
 
 import sc2
 from sc2 import Race
@@ -23,24 +23,24 @@ class MyBot(sc2.BotAI):
         self.base_trade_units = set()
         self.resource_list: List[List] = None
         self.time_table = {}
-        self.units_health = {}
-        self.units_attacked: List[Unit] = []
+        self.units_health: Dict[int, Union[int, float]] = {}
+        self.units_attacked: Units = None
+        self.units_attacked_tags: List[Set[int]] = []
         self.creep_queen_tag = 0
         self.far_corners: Set[Point2] = set()
         self.hq: Unit = None
         self.all_in = False
         self.enemy_unit_history: Dict[UnitTypeId, Set[int]] = {}
         self.first_overlord_tag = 0
+        self.iteration = 0
+        self.last_attack_iter = 0
 
         # enemy stats
-        self.last_enemy_time = 0
-        self.last_enemy_count = 0
-        self.enemy_insight_frames = 0
-        self.last_enemy_positions = []
         self.enemy_expansions: Units = None
 
         self.build_order = []
         self.production_order = []
+        self.forces: Units = None
 
     def _prepare_first_step(self):
         sc2.BotAI._prepare_first_step(self)
@@ -53,22 +53,26 @@ class MyBot(sc2.BotAI):
 
     async def on_step(self, iteration):
 
+        if self.time_budget_available and self.time_budget_available < 0.05:
+            return
+
         self.production_order = []
         # enemy info
         self.calc_enemy_info()
+        self.iteration = iteration
 
-        forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units | self.base_trade_units) |
-                  self.units(UnitTypeId.BANELING) |
-                  self.units(UnitTypeId.HYDRALISK) |
-                  self.units(UnitTypeId.ROACH).tags_not_in(self.scout_units | self.base_trade_units) |
-                  self.units(UnitTypeId.MUTALISK) |
-                  self.units(UnitTypeId.OVERSEER))
+        self.forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units | self.base_trade_units) |
+                       self.units(UnitTypeId.BANELING) |
+                       self.units(UnitTypeId.HYDRALISK) |
+                       self.units(UnitTypeId.ROACH).tags_not_in(self.scout_units | self.base_trade_units) |
+                       self.units(UnitTypeId.MUTALISK) |
+                       self.units(UnitTypeId.OVERSEER))
         half_size = self.start_location.distance_to(self.game_info.map_center)
 
         # if i don't even have a townhall
         # this has to be there because sometimes `self.townhalls` returns nothing even though there're clearly townhalls
         if not self.townhalls.exists:
-            for unit in self.units(UnitTypeId.DRONE) | self.units(UnitTypeId.QUEEN) | forces:
+            for unit in self.units(UnitTypeId.DRONE) | self.units(UnitTypeId.QUEEN) | self.forces:
                 await self.do(unit.attack(self.enemy_start_locations[0]))
             return
         else:
@@ -80,10 +84,10 @@ class MyBot(sc2.BotAI):
                     (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Terran)
 
         is_zerg = self.enemy_race == Race.Zerg or \
-                    (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Zerg)
+                  (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Zerg)
 
         is_protoss = self.enemy_race == Race.Protoss or \
-                    (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Protoss)
+                     (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Protoss)
 
         if is_terran:
             self.build_order = [
@@ -117,7 +121,7 @@ class MyBot(sc2.BotAI):
         actions = []
         enemy_nearby = self.enemy_nearby()
         if enemy_nearby:
-            for unit in forces:
+            for unit in self.forces:
                 unit: Unit = unit
                 # fight within spinecrawler
                 sc = self.units(UnitTypeId.SPINECRAWLER).ready
@@ -130,23 +134,26 @@ class MyBot(sc2.BotAI):
                     actions.append(unit.attack(enemy_nearby.position))
                 else:
                     actions.append(unit.move(self.start_location))
-
             for unit in self.units(UnitTypeId.SWARMHOSTMP).ready:
                 abilities = (await self.get_available_abilities([unit]))[0]
-                if AbilityId.EFFECT_SPAWNLOCUSTS in abilities and enemy_nearby.position.distance_to(unit.position) < 10:
+                if AbilityId.EFFECT_SPAWNLOCUSTS in abilities and enemy_nearby.position.distance_to(
+                        unit.position) < 20:
                     actions.append(unit(AbilityId.EFFECT_SPAWNLOCUSTS, enemy_nearby.position))
         elif self.supply_used > 190:
-            target = self.select_target()
-            for unit in forces:
-                actions.append(unit.attack(target))
+            if iteration - self.last_attack_iter > 10:
+                self.last_attack_iter = iteration
+                for unit in self.forces:
+                    if not unit.is_attacking:
+                        actions.append(unit.attack(self.attack_target))
         else:
-            for unit in forces.further_than(10, rally_point):
-                if not unit.is_moving and (not self.last_enemy_positions or unit.position.distance_to_closest(
-                        self.last_enemy_positions) > 10):
+            for unit in self.forces.further_than(10, rally_point):
+                if unit.type_id == UnitTypeId.BANELING and unit.is_attacking:
+                    continue
+                if not unit.is_moving:
                     actions.append(unit.move(rally_point))
-        swarmhost = self.units(UnitTypeId.SWARMHOSTMP).ready.idle
+        swarmhost = self.units(UnitTypeId.SWARMHOSTMP).ready
         sa = []
-        if not enemy_nearby and swarmhost.amount >= 5:
+        if swarmhost.amount >= 5:
             for s in swarmhost:
                 s: Unit = s
                 abilities = (await self.get_available_abilities([s]))[0]
@@ -160,12 +167,12 @@ class MyBot(sc2.BotAI):
         # attack reactions
         for x in self.units_attacked:
             workers_nearby = self.workers.closer_than(5, x.position).filter(lambda wk: not wk.is_attacking)
-            enemy_nearby = self.alive_enemy_units().closer_than(5, x.position)
+            enemy_nearby = self.alive_enemy_units.closer_than(5, x.position)
             if not enemy_nearby.exists:
                 continue
             if x.type_id == UnitTypeId.DRONE:
                 another_townhall = self.townhalls.further_than(25, x.position)
-                if forces.amount > enemy_nearby.amount and another_townhall.exists and self.townhalls.ready.amount > 3:
+                if self.forces.amount > enemy_nearby.amount and another_townhall.exists and self.townhalls.ready.amount > 3:
                     actions.append(x.move(another_townhall.first.position))
                 elif workers_nearby.amount > 2:
                     actions.append(x.attack(enemy_nearby.first))
@@ -182,8 +189,8 @@ class MyBot(sc2.BotAI):
                 actions.append(x.move(self.game_info.map_center))
             if not x.is_idle:
                 continue
-            if forces.closer_than(10, x.position).amount > self.alive_enemy_units().closer_than(10,
-                                                                                                x.position).amount:
+            if self.forces.closer_than(10, x.position).amount > self.alive_enemy_units.closer_than(10,
+                                                                                                   x.position).amount:
                 actions.append(x.attack(enemy_nearby.first, queue=True))
             else:
                 actions.append(x.move(rally_point))
@@ -218,7 +225,7 @@ class MyBot(sc2.BotAI):
         if (self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
                 UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) \
                 and self.count_unit(UnitTypeId.DRONE) < 76:
-            if forces.amount >= self.last_enemy_count or self.townhalls.amount < 2:
+            if self.forces.amount >= self.alive_enemy_units.amount or self.townhalls.amount < 2:
                 self.production_order.append(UnitTypeId.DRONE)
             else:
                 self.production_order.extend([UnitTypeId.HYDRALISK, UnitTypeId.ROACH, UnitTypeId.ZERGLING])
@@ -226,12 +233,8 @@ class MyBot(sc2.BotAI):
         # production queue
         # roach and hydra
         if self.units(UnitTypeId.ROACHWARREN).ready.exists and not self.units(
-                UnitTypeId.HYDRALISKDEN).ready.exists and self.units(UnitTypeId.ROACH).amount < 10:
+                UnitTypeId.HYDRALISKDEN).ready.exists and self.count_unit(UnitTypeId.ROACH) < 10:
             self.production_order.append(UnitTypeId.ROACH)
-        elif self.units(UnitTypeId.HYDRALISKDEN).ready.exists and self.units(UnitTypeId.HYDRALISK).amount < 20:
-            self.production_order.append(UnitTypeId.HYDRALISK)
-        elif self.units(UnitTypeId.ROACH).amount < 10:
-            self.production_order.extend([UnitTypeId.HYDRALISK, UnitTypeId.ROACH])
         else:
             self.production_order.extend([UnitTypeId.HYDRALISK])
         # swarm host
@@ -239,12 +242,12 @@ class MyBot(sc2.BotAI):
             if self.supply_used > 150:
                 self.production_order = [UnitTypeId.SWARMHOSTMP]
             else:
-                self.production_order.insert(0, UnitTypeId.SWARMHOSTMP)
+                self.production_order.append(UnitTypeId.SWARMHOSTMP)
         # zerglings
         zergling_amount = self.units(UnitTypeId.ZERGLING).amount + 2 * self.already_pending(UnitTypeId.ZERGLING)
         if self.townhalls.ready.amount == 1 and zergling_amount < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
             self.production_order.insert(0, UnitTypeId.ZERGLING)
-        elif zergling_amount < 12:
+        elif zergling_amount < self.townhalls.amount * 6:
             self.production_order.append(UnitTypeId.ZERGLING)
         if self.already_pending_upgrade(UpgradeId.ZERGLINGATTACKSPEED) == 1 and zergling_amount < 30:
             self.production_order.append(UnitTypeId.ZERGLING)
@@ -255,8 +258,9 @@ class MyBot(sc2.BotAI):
             if (self.townhalls.ready.amount == 2 and self.count_unit(UnitTypeId.BANELING) < 5) or \
                     (self.townhalls.ready.amount == 3 and self.count_unit(UnitTypeId.BANELING) < 10) or \
                     (self.townhalls.ready.amount >= 4 and self.count_unit(UnitTypeId.BANELING) < 20):
-                await self.do(self.units(UnitTypeId.ZERGLING).closest_to(self.start_location)(
-                    AbilityId.MORPHZERGLINGTOBANELING_BANELING))
+                z = self.units(UnitTypeId.ZERGLING).closer_than(half_size, self.start_location)
+                if z.exists:
+                    await self.do(z.first(AbilityId.MORPHZERGLINGTOBANELING_BANELING))
 
         # lair upgrade
         if not self.units(UnitTypeId.LAIR).exists and \
@@ -304,7 +308,7 @@ class MyBot(sc2.BotAI):
 
         # extractor and gas gathering
         if self.should_build_extractor():
-            drone = self.empty_workers().random
+            drone = self.empty_workers.random
             target = self.state.vespene_geyser.filter(lambda u: not u.is_mine).closest_to(drone.position)
             if self.townhalls.ready.closest_distance_to(target.position) < 10:
                 await self.do(drone.build(UnitTypeId.EXTRACTOR, target))
@@ -313,17 +317,17 @@ class MyBot(sc2.BotAI):
         for a in self.units(UnitTypeId.EXTRACTOR).ready:
             a: Unit = a
             if self.vespene - self.minerals > 200:
-                w: Units = self.empty_workers().closer_than(2.5, a)
+                w: Units = self.empty_workers.closer_than(2.5, a)
                 t: Unit = self.townhalls.closest_to(a.position)
                 if t.surplus_harvesters < 0 and t.distance_to(a) < 10 and w.exists and w.first.order_target == a.tag:
                     actions.append(w.first.gather(self.state.mineral_field.closest_to(w.first)))
             elif a.assigned_harvesters < a.ideal_harvesters:
-                w: Units = self.empty_workers().closer_than(20, a)
+                w: Units = self.empty_workers.closer_than(20, a)
                 if w.exists:
                     actions.append(w.random.gather(a))
                     continue
             elif a.assigned_harvesters > a.ideal_harvesters:
-                for w in self.empty_workers().closer_than(2.5, a):
+                for w in self.empty_workers.closer_than(2.5, a):
                     if w.order_target == a.tag:
                         actions.append(w.gather(self.state.mineral_field.closest_to(w)))
         await self.do_actions(actions)
@@ -382,7 +386,7 @@ class MyBot(sc2.BotAI):
         await self.do_actions(actions)
 
     async def dist_workers_and_inject_larva(self, townhall: Unit) -> Units:
-        excess_worker = self.empty_workers().closer_than(10, townhall.position)
+        excess_worker = self.empty_workers.closer_than(10, townhall.position)
         m = self.need_worker_mineral()
         if townhall.assigned_harvesters > townhall.ideal_harvesters and excess_worker.exists and m is not None:
             await self.do(excess_worker.random.gather(m))
@@ -416,8 +420,9 @@ class MyBot(sc2.BotAI):
 
     @property_cache_once_per_frame
     def empty_workers(self) -> Units:
-        def has_no_resource(u:Unit):
+        def has_no_resource(u: Unit):
             return not u.is_carrying_minerals and not u.is_carrying_vespene
+
         return self.workers.filter(has_no_resource)
 
     def can_place_creep_tumor(self, t: Point2) -> bool:
@@ -433,7 +438,11 @@ class MyBot(sc2.BotAI):
     async def upgrade_building(self):
         if self.workers.collecting.amount < 32:
             return
+        if self.forces.amount < self.alive_enemy_units.amount:
+            return
         for b in self.build_order:
+            if b == UnitTypeId.ROACHWARREN:
+                return
             u = self.units(b).ready
             if u.exists and u.first.is_idle:
                 abilities = await self.get_available_abilities(u.first, ignore_resource_requirements=True)
@@ -468,7 +477,8 @@ class MyBot(sc2.BotAI):
     def count_unit(self, unit_type: UnitTypeId) -> int:
         return self.units(unit_type).amount + self.already_pending(unit_type, all_units=True)
 
-    def select_target(self):
+    @property_cache_once_per_frame
+    def attack_target(self):
         if self.known_enemy_structures.exists:
             target = self.known_enemy_structures.furthest_to(self.enemy_start_locations[0])
             return target.position
@@ -477,20 +487,18 @@ class MyBot(sc2.BotAI):
     def enemy_nearby(self):
         for t in self.townhalls.ready:
             t: Unit = t
-            e = self.alive_enemy_units().closer_than(20, t.position)
-            if e.exists:
+            e: Units = self.alive_enemy_units.closer_than(20, t.position)
+            if e.visible.amount > 0:
                 return e.closest_to(t.position)
         return None
 
     @property_cache_once_per_frame
     def alive_enemy_units(self) -> Units:
-        def alive_and_can_attack(u:Unit) -> bool:
+        def alive_and_can_attack(u: Unit) -> bool:
             return u.health > 0 and u.can_attack
         return self.known_enemy_units.filter(alive_and_can_attack)
 
     def calc_enemy_info(self):
-        self.last_enemy_count = 0
-        self.last_enemy_positions = []
         self.enemy_expansions = self.known_enemy_structures.of_type({
             UnitTypeId.COMMANDCENTER,
             UnitTypeId.NEXUS,
@@ -500,35 +508,30 @@ class MyBot(sc2.BotAI):
             UnitTypeId.ORBITALCOMMAND,
             UnitTypeId.PLANETARYFORTRESS
         })
-        has_enemy = False
-        for t in self.units.structure:
-            t: Unit = t
-            threats = self.alive_enemy_units().closer_than(20, t)
-            self.last_enemy_count += threats.amount
-            if threats.exists:
-                self.last_enemy_positions.append(threats.closest_to(t).position)
-                has_enemy = True
         for e in self.known_enemy_units:
             e: Unit = e
             if e.type_id not in self.enemy_unit_history:
                 self.enemy_unit_history[e.type_id] = set()
             self.enemy_unit_history[e.type_id].add(e.tag)
 
-        if has_enemy:
-            self.enemy_insight_frames += 1
-            self.last_enemy_time = self.time
-        else:
-            self.enemy_insight_frames = 0
-
         def not_full_health(u: Unit) -> bool:
             return u.health < u.health_max
 
-        self.units_attacked = []
+        units_attacked = set()
         for w in self.units.filter(not_full_health):
             w: Unit = w
             if (w.tag in self.units_health and w.health > self.units_health[w.tag]) or w.tag not in self.units_health:
-                self.units_attacked.append(w)
+                units_attacked.add(w.tag)
             self.units_health[w.tag] = w.health
+
+        if len(self.units_attacked_tags) >= 5:
+            self.units_attacked_tags.pop(0)
+        self.units_attacked_tags.append(units_attacked)
+
+        tags_union: Set[int] = set()
+        for s in self.units_attacked_tags:
+            tags_union = tags_union | s
+        self.units_attacked = self.units.tags_in(tags_union)
 
     async def produce_unit(self):
         if self.supply_left == 0:
@@ -684,9 +687,9 @@ class MyBot(sc2.BotAI):
         half_size = self.start_location.distance_to(self.game_info.map_center)
         proxy_barracks = self.known_enemy_structures. \
             of_type({UnitTypeId.BARRACKS}).closer_than(half_size, self.start_location)
-        enemy_units = self.alive_enemy_units().exclude_type(
+        enemy_units = self.alive_enemy_units.exclude_type(
             {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
-        enemy_drones = self.alive_enemy_units().of_type(
+        enemy_drones = self.alive_enemy_units.of_type(
             {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
         townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
         early_enemy_unit_count = 0.5 * self.enemy_unit_history_count(
@@ -695,7 +698,7 @@ class MyBot(sc2.BotAI):
         # build spinecrawlers
         if 1 < self.townhalls.ready.amount < 3 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
-                self.count_unit(UnitTypeId.SPINECRAWLER) <= min(early_enemy_unit_count / 3, 2):
+                self.count_unit(UnitTypeId.SPINECRAWLER) < min(early_enemy_unit_count / 3, 3):
             await self.build_spine_crawler()
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or
@@ -788,7 +791,7 @@ class MyBot(sc2.BotAI):
         actions = []
         if self.already_pending(UpgradeId.ZERGLINGMOVEMENTSPEED) > 0 or self.vespene > 100:
             for a in self.units(UnitTypeId.EXTRACTOR).ready:
-                for w in self.empty_workers().closer_than(2.5, a):
+                for w in self.empty_workers.closer_than(2.5, a):
                     actions.append(w.gather(self.state.mineral_field.closest_to(w)))
 
         for d in self.units(UnitTypeId.DRONE).idle:
@@ -801,16 +804,13 @@ class MyBot(sc2.BotAI):
                 base_trade_units.add(u.tag)
         self.base_trade_units = base_trade_units
 
-        forces = self.units.of_type({UnitTypeId.ROACH, UnitTypeId.ZERGLING}).tags_not_in(
-            self.base_trade_units | self.scout_units)
-
-        if forces.idle.amount > 40 and forces.idle.amount > self.alive_enemy_units().amount:
-            for f in forces.idle:
+        if self.forces.idle.amount > 40 and self.forces.idle.amount > self.alive_enemy_units.amount:
+            for f in self.forces.idle:
                 self.base_trade_units.add(f.tag)
-                actions.append(f.attack(self.select_target()))
+                actions.append(f.attack(self.attack_target))
 
-        if forces.idle.amount > 20 and len(self.base_trade_units) == 0:
-            for f in forces.idle.random_group_of(10):
+        if self.forces.idle.amount > 20 and len(self.base_trade_units) == 0:
+            for f in self.forces.idle.random_group_of(10):
                 f: Unit = f
                 self.base_trade_units.add(f.tag)
                 if proxy_barracks.exists:
