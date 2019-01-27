@@ -5,6 +5,7 @@ from typing import List, Dict, Set
 
 import sc2
 from sc2 import Race
+from sc2.cache import property_cache_once_per_frame
 from sc2.constants import *
 from sc2.position import Point2, Rect
 from sc2.unit import Unit
@@ -303,7 +304,7 @@ class MyBot(sc2.BotAI):
 
         # extractor and gas gathering
         if self.should_build_extractor():
-            drone = self.workers.random
+            drone = self.empty_workers().random
             target = self.state.vespene_geyser.filter(lambda u: not u.is_mine).closest_to(drone.position)
             if self.townhalls.ready.closest_distance_to(target.position) < 10:
                 await self.do(drone.build(UnitTypeId.EXTRACTOR, target))
@@ -312,17 +313,17 @@ class MyBot(sc2.BotAI):
         for a in self.units(UnitTypeId.EXTRACTOR).ready:
             a: Unit = a
             if self.vespene - self.minerals > 200:
-                w: Units = self.workers.closer_than(2.5, a)
+                w: Units = self.empty_workers().closer_than(2.5, a)
                 t: Unit = self.townhalls.closest_to(a.position)
                 if t.surplus_harvesters < 0 and t.distance_to(a) < 10 and w.exists and w.first.order_target == a.tag:
                     actions.append(w.first.gather(self.state.mineral_field.closest_to(w.first)))
             elif a.assigned_harvesters < a.ideal_harvesters:
-                w: Units = self.workers.closer_than(20, a)
+                w: Units = self.empty_workers().closer_than(20, a)
                 if w.exists:
                     actions.append(w.random.gather(a))
                     continue
             elif a.assigned_harvesters > a.ideal_harvesters:
-                for w in self.workers.closer_than(2.5, a):
+                for w in self.empty_workers().closer_than(2.5, a):
                     if w.order_target == a.tag:
                         actions.append(w.gather(self.state.mineral_field.closest_to(w)))
         await self.do_actions(actions)
@@ -381,7 +382,7 @@ class MyBot(sc2.BotAI):
         await self.do_actions(actions)
 
     async def dist_workers_and_inject_larva(self, townhall: Unit) -> Units:
-        excess_worker = self.workers.closer_than(10, townhall.position)
+        excess_worker = self.empty_workers().closer_than(10, townhall.position)
         m = self.need_worker_mineral()
         if townhall.assigned_harvesters > townhall.ideal_harvesters and excess_worker.exists and m is not None:
             await self.do(excess_worker.random.gather(m))
@@ -412,6 +413,12 @@ class MyBot(sc2.BotAI):
             if self.can_place_creep_tumor(t):
                 return t
         return None
+
+    @property_cache_once_per_frame
+    def empty_workers(self) -> Units:
+        def has_no_resource(u:Unit):
+            return not u.is_carrying_minerals and not u.is_carrying_vespene
+        return self.workers.filter(has_no_resource)
 
     def can_place_creep_tumor(self, t: Point2) -> bool:
         creep_tumors = self.units.of_type({
@@ -475,6 +482,7 @@ class MyBot(sc2.BotAI):
                 return e.closest_to(t.position)
         return None
 
+    @property_cache_once_per_frame
     def alive_enemy_units(self) -> Units:
         def alive_and_can_attack(u:Unit) -> bool:
             return u.health > 0 and u.can_attack
@@ -780,7 +788,7 @@ class MyBot(sc2.BotAI):
         actions = []
         if self.already_pending(UpgradeId.ZERGLINGMOVEMENTSPEED) > 0 or self.vespene > 100:
             for a in self.units(UnitTypeId.EXTRACTOR).ready:
-                for w in self.workers.closer_than(2.5, a):
+                for w in self.empty_workers().closer_than(2.5, a):
                     actions.append(w.gather(self.state.mineral_field.closest_to(w)))
 
         for d in self.units(UnitTypeId.DRONE).idle:
