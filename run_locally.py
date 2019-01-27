@@ -1,19 +1,20 @@
 import json
 
+import sc2
 from sc2 import run_game, maps, Race, Difficulty
 from sc2.player import Bot, Computer
-
 from bot import MyBot
 from examples.terran.proxy_rax import ProxyRaxBot
 from examples.zerg.zerg_rush import ZergRushBot
 
 
 def main():
+    sc2.paths.BASEDIR["Windows"] = "D:/Program Files (x86)/StarCraft II"
+
     with open("botinfo.json") as f:
         info = json.load(f)
 
     race = Race[info["race"]]
-
     run_game(maps.get("(2)LostAndFoundLE"), [
         Bot(race, MyBot()),
         # Bot(Race.Terran, ProxyRaxBot()),
