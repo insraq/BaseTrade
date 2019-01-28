@@ -143,7 +143,7 @@ class MyBot(sc2.BotAI):
             if iteration - self.last_attack_iter > 10:
                 self.last_attack_iter = iteration
                 for unit in self.forces:
-                    if not unit.is_attacking:
+                    if not unit.is_attacking and unit.health_percentage >= 0.1:
                         actions.append(unit.attack(self.attack_target))
         else:
             for unit in self.forces.further_than(10, rally_point):
@@ -166,6 +166,7 @@ class MyBot(sc2.BotAI):
             actions.extend(sa)
         # attack reactions
         for x in self.units_attacked:
+            x: Unit = x
             workers_nearby = self.workers.closer_than(5, x.position).filter(lambda wk: not wk.is_attacking)
             enemy_nearby = self.alive_enemy_units.closer_than(5, x.position)
             if not enemy_nearby.exists:
@@ -187,6 +188,8 @@ class MyBot(sc2.BotAI):
                 actions.append(x.move(rally_point))
             elif x.tag == self.first_overlord_tag:
                 actions.append(x.move(self.game_info.map_center))
+            elif x.health_percentage < 0.1:
+                actions.append(x.move(rally_point))
             if not x.is_idle:
                 continue
             if self.forces.closer_than(10, x.position).amount > self.alive_enemy_units.closer_than(10,
@@ -496,6 +499,7 @@ class MyBot(sc2.BotAI):
     def alive_enemy_units(self) -> Units:
         def alive_and_can_attack(u: Unit) -> bool:
             return u.health > 0 and u.can_attack
+
         return self.known_enemy_units.filter(alive_and_can_attack)
 
     def calc_enemy_info(self):
