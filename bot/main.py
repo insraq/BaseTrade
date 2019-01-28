@@ -153,7 +153,8 @@ class MyBot(sc2.BotAI):
                         actions.append(unit.attack(self.attack_target))
         else:
             for unit in self.forces.further_than(10, rally_point):
-                if unit.type_id == UnitTypeId.BANELING and unit.is_attacking:
+                if unit.type_id == UnitTypeId.BANELING and \
+                        unit.is_attacking and self.alive_enemy_units.closer_than(5, unit).exists:
                     continue
                 if not unit.is_moving:
                     actions.append(unit.move(rally_point))
@@ -716,13 +717,10 @@ class MyBot(sc2.BotAI):
         enemy_drones = self.alive_enemy_units.of_type(
             {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
         townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
-        early_enemy_unit_count = 0.5 * self.enemy_unit_history_count(
-            [UnitTypeId.ZERGLING]) + self.enemy_unit_history_count(
-            [UnitTypeId.MARINE, UnitTypeId.ZEALOT, UnitTypeId.ADEPT, UnitTypeId.BANELING, UnitTypeId.REAPER])
         # build spinecrawlers
         if 1 < self.townhalls.ready.amount < 3 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
-                self.count_unit(UnitTypeId.SPINECRAWLER) < min(early_enemy_unit_count / 3, 3):
+                self.count_unit(UnitTypeId.SPINECRAWLER) < min(self.enemy_forces_supply / 3, 3):
             await self.build_spine_crawler()
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or
