@@ -31,6 +31,8 @@ class MyBot(sc2.BotAI):
         self.hq: Unit = None
         self.all_in = False
         self.enemy_unit_history: Dict[UnitTypeId, Set[int]] = {}
+        self.enemy_forces: Dict[int, float] = {}
+        self.enemy_forces_supply: float = 0
         self.first_overlord_tag = 0
         self.iteration = 0
         self.last_attack_iter = 0
@@ -50,6 +52,10 @@ class MyBot(sc2.BotAI):
         s = self.start_location.closest(corners)
         e = self.enemy_start_locations[0].closest(corners)
         self.far_corners = corners - {s, e}
+
+    async def on_unit_destroyed(self, unit_tag):
+        if unit_tag in self.enemy_forces:
+            del self.enemy_forces[unit_tag]
 
     async def on_step(self, iteration):
 
@@ -228,7 +234,7 @@ class MyBot(sc2.BotAI):
         if (self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
                 UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) \
                 and self.count_unit(UnitTypeId.DRONE) < 76:
-            if self.forces.amount >= self.alive_enemy_units.amount or self.townhalls.amount < 2:
+            if self.i_have_more_forces or self.townhalls.amount < 2:
                 self.production_order.append(UnitTypeId.DRONE)
             else:
                 self.production_order.extend([UnitTypeId.HYDRALISK, UnitTypeId.ROACH, UnitTypeId.ZERGLING])
@@ -438,10 +444,15 @@ class MyBot(sc2.BotAI):
         exp_points = list(self.expansion_locations.keys())
         return not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5
 
+    @property_cache_once_per_frame
+    def i_have_more_forces(self):
+        forces_supply = self.supply_used - self.count_unit(UnitTypeId.DRONE) - self.count_unit(UnitTypeId.QUEEN) * 2
+        return forces_supply >= self.enemy_forces_supply
+
     async def upgrade_building(self):
         if self.workers.collecting.amount < 32:
             return
-        if self.forces.amount < self.alive_enemy_units.amount:
+        if not self.i_have_more_forces:
             return
         for b in self.build_order:
             if b == UnitTypeId.ROACHWARREN:
@@ -516,7 +527,16 @@ class MyBot(sc2.BotAI):
             e: Unit = e
             if e.type_id not in self.enemy_unit_history:
                 self.enemy_unit_history[e.type_id] = set()
+            if e.tag not in self.enemy_forces and \
+                    e.health > 0 and e.can_attack and \
+                    e.type_id not in {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}:
+                self.enemy_forces[e.tag] = e._type_data._proto.food_required
             self.enemy_unit_history[e.type_id].add(e.tag)
+
+        self.enemy_forces_supply = 0
+
+        for k, v in self.enemy_forces.items():
+            self.enemy_forces_supply += v
 
         def not_full_health(u: Unit) -> bool:
             return u.health < u.health_max
@@ -808,7 +828,7 @@ class MyBot(sc2.BotAI):
                 base_trade_units.add(u.tag)
         self.base_trade_units = base_trade_units
 
-        if self.forces.idle.amount > 40 and self.forces.idle.amount > self.alive_enemy_units.amount:
+        if self.forces.idle.amount > 40 and self.i_have_more_forces:
             for f in self.forces.idle:
                 self.base_trade_units.add(f.tag)
                 actions.append(f.attack(self.attack_target))
