@@ -68,9 +68,7 @@ class MyBot(sc2.BotAI):
 
         self.production_order = []
         # enemy info
-        t = time.process_time()
         self.calc_enemy_info()
-        print("Calc enemy info takes ", time.process_time() - t)
         self.iteration = iteration
 
         self.forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units | self.base_trade_units) |
@@ -146,11 +144,11 @@ class MyBot(sc2.BotAI):
                     actions.append(unit.attack(enemy_nearby.position))
                 else:
                     actions.append(unit.move(self.start_location))
-            for unit in self.units(UnitTypeId.SWARMHOSTMP).ready:
-                abilities = (await self.get_available_abilities([unit]))[0]
-                if AbilityId.EFFECT_SPAWNLOCUSTS in abilities and enemy_nearby.position.distance_to(
-                        unit.position) < 20:
-                    actions.append(unit(AbilityId.EFFECT_SPAWNLOCUSTS, enemy_nearby.position))
+            if self.enemy_forces_distance < half_size:
+                for unit in self.units(UnitTypeId.SWARMHOSTMP).ready:
+                    abilities = (await self.get_available_abilities([unit]))[0]
+                    if AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
+                        actions.append(unit(AbilityId.EFFECT_SPAWNLOCUSTS, enemy_nearby.position))
         elif self.supply_used > 190:
             if iteration - self.last_attack_iter > 10:
                 self.last_attack_iter = iteration
