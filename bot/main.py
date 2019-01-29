@@ -461,7 +461,7 @@ class MyBot(sc2.BotAI):
 
     def infestor_cast(self, unit: Unit):
         e: Units = self.alive_enemy_units.closer_than(10, unit.position)
-        if unit.energy >= 75 and e.amount > 5:
+        if unit.energy >= 75 and e.amount > 5 and self.units.closer_than(10, unit.position).amount > 5:
             self.actions.append(unit(AbilityId.FUNGALGROWTH_FUNGALGROWTH, e.random.position))
         elif unit.energy >= 25 and e.amount > 5:
             self.actions.append(unit(AbilityId.INFESTEDTERRANS_INFESTEDTERRANS, e.random.position))
