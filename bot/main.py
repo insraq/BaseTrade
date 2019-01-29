@@ -1,7 +1,8 @@
 import json
 import math
+import time
 from pathlib import Path
-from typing import List, Dict, Set, Union
+from typing import List, Dict, Set, Union, Tuple
 
 import sc2
 from sc2 import Race
@@ -31,8 +32,10 @@ class MyBot(sc2.BotAI):
         self.hq: Unit = None
         self.all_in = False
         self.enemy_unit_history: Dict[UnitTypeId, Set[int]] = {}
-        self.enemy_forces: Dict[int, float] = {}
+        self.enemy_forces: Dict[int, Unit] = {}
         self.enemy_forces_supply: float = 0
+        self.enemy_forces_distance: float = None
+        self.enemy_has_changed = False
         self.first_overlord_tag = 0
         self.iteration = 0
         self.last_attack_iter = 0
@@ -55,6 +58,7 @@ class MyBot(sc2.BotAI):
 
     async def on_unit_destroyed(self, unit_tag):
         if unit_tag in self.enemy_forces:
+            self.enemy_has_changed = True
             del self.enemy_forces[unit_tag]
 
     async def on_step(self, iteration):
@@ -64,7 +68,9 @@ class MyBot(sc2.BotAI):
 
         self.production_order = []
         # enemy info
+        t = time.process_time()
         self.calc_enemy_info()
+        print("Calc enemy info takes ", time.process_time() - t)
         self.iteration = iteration
 
         self.forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units | self.base_trade_units) |
@@ -188,15 +194,20 @@ class MyBot(sc2.BotAI):
                         w: Unit = w
                         if not w.is_attacking:
                             actions.append(w.attack(enemy_nearby.first))
+                continue
             elif x.is_structure:
                 if x.build_progress < 1 and x.health_percentage < 0.1:
                     actions.append(x(AbilityId.CANCEL))
+                continue
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
                 actions.append(x.move(rally_point))
+                continue
             elif x.tag == self.first_overlord_tag:
                 actions.append(x.move(self.game_info.map_center))
+                continue
             elif x.health_percentage < 0.1:
                 actions.append(x.move(rally_point))
+                continue
             if not x.is_idle:
                 continue
             if self.forces.closer_than(10, x.position).amount > self.alive_enemy_units.closer_than(10,
@@ -232,13 +243,12 @@ class MyBot(sc2.BotAI):
                                      near=t.position.towards(self.state.mineral_field.closest_to(t).position, 3),
                                      random_alternative=False)
 
-        if (self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
-                UnitTypeId.EXTRACTOR).amount * 3 or self.townhalls.ready.amount == 1) \
-                and self.count_unit(UnitTypeId.DRONE) < 76:
-            if self.i_have_more_forces or self.townhalls.amount < 2:
-                self.production_order.append(UnitTypeId.DRONE)
-            else:
-                self.production_order.extend([UnitTypeId.HYDRALISK, UnitTypeId.ROACH, UnitTypeId.ZERGLING])
+        need_workers = self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
+            UnitTypeId.EXTRACTOR).amount * 3
+        if need_workers and \
+                self.count_unit(UnitTypeId.DRONE) < 76 and \
+                (self.i_have_more_forces or self.townhalls.amount < 2 or self.enemy_forces_distance > half_size):
+            self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
         # roach and hydra
@@ -448,6 +458,7 @@ class MyBot(sc2.BotAI):
     @property_cache_once_per_frame
     def i_have_more_forces(self):
         forces_supply = self.supply_used - self.count_unit(UnitTypeId.DRONE) - self.count_unit(UnitTypeId.QUEEN) * 2
+        print("me = ", forces_supply, " enemy = ", self.enemy_forces_supply, " distance = ", self.enemy_forces_distance)
         return forces_supply >= self.enemy_forces_supply
 
     async def upgrade_building(self):
@@ -524,20 +535,29 @@ class MyBot(sc2.BotAI):
             UnitTypeId.ORBITALCOMMAND,
             UnitTypeId.PLANETARYFORTRESS
         })
+
+        if self.enemy_forces_distance is None:
+            self.enemy_forces_distance = self.start_location.distance_to(self.enemy_start_locations[0])
+
         for e in self.known_enemy_units:
             e: Unit = e
             if e.type_id not in self.enemy_unit_history:
                 self.enemy_unit_history[e.type_id] = set()
-            if e.tag not in self.enemy_forces and \
-                    e.health > 0 and e.can_attack and \
-                    e.type_id not in {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}:
-                self.enemy_forces[e.tag] = e._type_data._proto.food_required
+            if e.health > 0 and e.can_attack and e.type_id not in {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}:
+                self.enemy_forces[e.tag] = e
+                self.enemy_has_changed = True
             self.enemy_unit_history[e.type_id].add(e.tag)
 
         self.enemy_forces_supply = 0
-
+        distance = 0
         for k, v in self.enemy_forces.items():
-            self.enemy_forces_supply += v
+            self.enemy_forces_supply += v._type_data._proto.food_required
+            if self.enemy_has_changed:
+                distance += v.distance_to(self.start_location)
+        if distance > 0 and len(self.enemy_forces) > 0:
+            self.enemy_forces_distance = distance / len(self.enemy_forces)
+
+        self.enemy_has_changed = False
 
         def not_full_health(u: Unit) -> bool:
             return u.health < u.health_max
