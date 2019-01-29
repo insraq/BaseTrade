@@ -456,7 +456,7 @@ class MyBot(sc2.BotAI):
     def surplus_forces(self):
         forces_supply = self.supply_used - self.count_unit(UnitTypeId.DRONE) - self.count_unit(UnitTypeId.QUEEN) * 2
         print("me:", forces_supply, "enemy:", self.enemy_forces_supply, "distance:", self.enemy_forces_distance)
-        return forces_supply >= self.enemy_forces_supply
+        return forces_supply - self.enemy_forces_supply
 
     async def upgrade_building(self):
         if self.workers.collecting.amount < 32:
