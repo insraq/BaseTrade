@@ -98,17 +98,17 @@ class MyBot(sc2.BotAI):
         is_protoss = self.enemy_race == Race.Protoss or \
                      (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Protoss)
 
-        if is_terran:
+        if is_zerg:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
-                UnitTypeId.BANELINGNEST,
+                UnitTypeId.ROACHWARREN,
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
         else:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
-                UnitTypeId.ROACHWARREN,
+                UnitTypeId.BANELINGNEST,
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
@@ -244,7 +244,8 @@ class MyBot(sc2.BotAI):
             UnitTypeId.EXTRACTOR).amount * 3
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.surplus_forces > 0 or self.townhalls.amount < 2 or self.enemy_forces_distance > half_size):
+                (self.surplus_forces > 0 or self.townhalls.amount < 2 or
+                 self.enemy_forces_distance > half_size and self.surplus_forces > -10):
             self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
