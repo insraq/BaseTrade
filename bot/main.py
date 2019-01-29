@@ -1,8 +1,7 @@
 import json
 import math
-import time
 from pathlib import Path
-from typing import List, Dict, Set, Union, Tuple
+from typing import List, Dict, Set, Union
 
 import sc2
 from sc2 import Race
@@ -466,7 +465,7 @@ class MyBot(sc2.BotAI):
             return
         for b in self.build_order:
             if b == UnitTypeId.ROACHWARREN:
-                return
+                continue
             u = self.units(b).ready
             if u.exists and u.first.is_idle:
                 abilities = await self.get_available_abilities(u.first, ignore_resource_requirements=True)
