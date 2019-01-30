@@ -82,7 +82,7 @@ class MyBot(sc2.BotAI):
                        self.units(UnitTypeId.MUTALISK) |
                        self.units(UnitTypeId.OVERSEER) |
                        self.units(UnitTypeId.INFESTOR) |
-                       self.units(UnitTypeId.INFESTEDTERRAN))
+                       self.units(UnitTypeId.INFESTORTERRAN))
 
         half_size = self.start_location.distance_to(self.game_info.map_center)
 
@@ -159,9 +159,7 @@ class MyBot(sc2.BotAI):
                     abilities = (await self.get_available_abilities([unit]))[0]
                     if AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
                         self.actions.append(unit(AbilityId.EFFECT_SPAWNLOCUSTS, enemy_nearby.position))
-        elif self.supply_used > 190 or \
-                (self.reached_full_supply and self.supply_used > 160 and self.surplus_forces > 30):
-            self.reached_full_supply = True
+        elif self.supply_used > 190 or self.surplus_forces > 20 or self.enemy_expansions.amount >= self.townhalls.amount:
             for unit in self.forces:
                 if not unit.is_attacking and unit.health_percentage >= 0.1:
                     self.actions.append(unit.attack(self.attack_target))
@@ -268,8 +266,8 @@ class MyBot(sc2.BotAI):
             UnitTypeId.EXTRACTOR).amount * 3
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.surplus_forces > 0 or self.townhalls.amount < 2 or
-                 self.enemy_forces_distance > half_size and self.surplus_forces > -10):
+                (self.est_surplus_forces > 0 or self.townhalls.amount < 2 or
+                 self.enemy_forces_distance > half_size and self.est_surplus_forces > -10):
             self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
@@ -487,15 +485,22 @@ class MyBot(sc2.BotAI):
         return not creep_tumors.closer_than(10, t).exists and t.position.distance_to_closest(exp_points) > 5
 
     @property_cache_once_per_frame
-    def surplus_forces(self):
+    def est_surplus_forces(self):
         forces_supply = self.supply_used - self.count_unit(UnitTypeId.DRONE) - self.count_unit(UnitTypeId.QUEEN) * 2
+        return forces_supply - self.enemy_forces_supply
+
+    @property_cache_once_per_frame
+    def surplus_forces(self):
+        forces_supply = self.units.of_type({UnitTypeId.ZERGLING, UnitTypeId.BANELING}).amount * 0.5 + \
+                        self.units.of_type({UnitTypeId.ROACH, UnitTypeId.HYDRALISK, UnitTypeId.INFESTOR}).amount * 2 + \
+                        self.units.of_type({UnitTypeId.SWARMHOSTMP}).amount * 3
         print("me:", forces_supply, "enemy:", self.enemy_forces_supply, "distance:", self.enemy_forces_distance)
         return forces_supply - self.enemy_forces_supply
 
     async def upgrade_building(self):
         if self.workers.collecting.amount < 32:
             return
-        if self.surplus_forces < 0:
+        if self.est_surplus_forces < 0:
             return
         for b in self.build_order:
             if b == UnitTypeId.ROACHWARREN:
@@ -874,7 +879,7 @@ class MyBot(sc2.BotAI):
                 base_trade_units.add(u.tag)
         self.base_trade_units = base_trade_units
 
-        if self.forces.idle.amount > 40 and self.surplus_forces > 0:
+        if self.forces.idle.amount > 40 and self.est_surplus_forces > 0:
             for f in self.forces.idle:
                 self.base_trade_units.add(f.tag)
                 self.actions.append(f.attack(self.attack_target))
