@@ -352,15 +352,14 @@ class MyBot(sc2.BotAI):
             ])
 
         # second overlord scout
-        if self.units(UnitTypeId.OVERLORD).amount == 2:
-            o: Units = self.units(UnitTypeId.OVERLORD).tags_not_in({self.first_overlord_tag})
-            if o.exists:
-                self.second_overlord_tag = o.first.tag
-
         o: Units = self.units.tags_in({self.second_overlord_tag})
         if o.exists and o.first.is_idle:
             self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 5), queue=True))
             self.actions.append(o.first.patrol(self.rally_point.towards(self.game_info.map_center, 20), queue=True))
+        else:
+            o: Units = self.units(UnitTypeId.OVERLORD).tags_not_in({self.first_overlord_tag})
+            if o.exists:
+                self.second_overlord_tag = o.first.tag
 
         # extractor and gas gathering
         if self.should_build_extractor():
@@ -577,7 +576,7 @@ class MyBot(sc2.BotAI):
     @property_cache_once_per_frame
     def visible_enemy_units(self) -> Units:
         def alive_and_can_attack(u: Unit) -> bool:
-            return u.health > 0 and u.can_attack and not u._type_data._proto.food_required > 0
+            return u.health > 0 and u.can_attack and u._type_data._proto.food_required > 0
         return self.known_enemy_units.filter(alive_and_can_attack)
 
     def calc_enemy_info(self):
