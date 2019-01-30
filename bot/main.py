@@ -161,10 +161,13 @@ class MyBot(sc2.BotAI):
                         self.actions.append(unit(AbilityId.EFFECT_SPAWNLOCUSTS, enemy_nearby.position))
         elif self.supply_used > 190 or self.surplus_forces > 20 or self.enemy_expansions.amount >= self.townhalls.amount:
             for unit in self.forces:
-                if not unit.is_attacking and unit.health_percentage >= 0.1:
-                    self.actions.append(unit.attack(self.attack_target))
-                if unit.type_id == UnitTypeId.INFESTOR:
+                if unit.health_percentage < 0.1:
+                    self.actions.append(unit.move(self.rally_point))
+                elif unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
+                elif not unit.is_attacking:
+                    self.actions.append(unit.attack(self.attack_target))
+
         else:
             for unit in self.forces.further_than(10, self.rally_point):
                 if unit.type_id == UnitTypeId.BANELING and \
