@@ -81,7 +81,8 @@ class MyBot(sc2.BotAI):
                        self.units(UnitTypeId.ROACH).tags_not_in(self.scout_units | self.base_trade_units) |
                        self.units(UnitTypeId.MUTALISK) |
                        self.units(UnitTypeId.OVERSEER) |
-                       self.units(UnitTypeId.INFESTOR))
+                       self.units(UnitTypeId.INFESTOR) |
+                       self.units(UnitTypeId.INFESTEDTERRAN))
 
         half_size = self.start_location.distance_to(self.game_info.map_center)
 
@@ -132,7 +133,7 @@ class MyBot(sc2.BotAI):
             build_overlord = est_supply_left < 8
 
         if build_overlord and est_supply_cap <= 200:
-            await self.train(UnitTypeId.OVERLORD)
+            self.train(UnitTypeId.OVERLORD)
 
         # attacks
         enemy_nearby = self.enemy_nearby()
@@ -180,10 +181,17 @@ class MyBot(sc2.BotAI):
                 s: Unit = s
                 abilities = (await self.get_available_abilities([s]))[0]
                 if self.enemy_expansions.exists and AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
-                    closest_exp = self.enemy_expansions.closest_to(s.position)
-                    sa.append(s.move(closest_exp.position.towards(self.start_location, 20), queue=True))
-                    sa.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, closest_exp.position, queue=True))
-                    sa.append(s.move(self.rally_point, queue=True))
+                    e: Units = self.alive_enemy_units.closer_than(10, s.position)
+                    if e.amount > 5:
+                        self.actions.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, e.random.position))
+                        self.actions.append(s.move(self.rally_point, queue=True))
+                        continue
+                    else:
+                        closest_exp = self.enemy_expansions.closest_to(s.position)
+                        sa.append(s.move(closest_exp.position.towards(self.start_location, 20)))
+                        sa.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, closest_exp.position, queue=True))
+                        sa.append(s.move(self.rally_point, queue=True))
+
         if len(sa) >= 15:
             self.actions.extend(sa)
         # attack reactions
@@ -605,9 +613,9 @@ class MyBot(sc2.BotAI):
         if self.supply_left == 0:
             return
         for u in self.production_order:
-            await self.train(u)
+            self.train(u)
 
-    async def train(self, u):
+    def train(self, u):
         lv = self.units(UnitTypeId.LARVA)
         if lv.exists and self.can_afford(u):
             self.actions.append(lv.random.train(u))
@@ -770,7 +778,7 @@ class MyBot(sc2.BotAI):
             self.actions.append(self.townhalls.ready.closest_to(self.start_location)(AbilityId.RALLY_HATCHERY_UNITS,
                                                                                      townhall_to_defend.position))
             if self.units(UnitTypeId.ROACHWARREN).ready.exists:
-                await self.train(UnitTypeId.ROACH)
+                self.train(UnitTypeId.ROACH)
 
             sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
             if sp.exists:
@@ -780,10 +788,10 @@ class MyBot(sc2.BotAI):
                 elif self.count_unit(UnitTypeId.SPINECRAWLER) <= 2:
                     await self.build_spine_crawler()
                 else:
-                    await self.train(UnitTypeId.ZERGLING)
+                    self.train(UnitTypeId.ZERGLING)
 
             else:
-                await self.train(UnitTypeId.DRONE)
+                self.train(UnitTypeId.DRONE)
 
             self.early_attack()
 
@@ -804,7 +812,7 @@ class MyBot(sc2.BotAI):
         if cannons.exists:
             # production queue
             if self.units(UnitTypeId.ROACHWARREN).ready.exists:
-                await self.train(UnitTypeId.ROACH)
+                self.train(UnitTypeId.ROACH)
 
             sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
             if sp.exists:
@@ -826,7 +834,7 @@ class MyBot(sc2.BotAI):
                             random_alternative=False
                         )
 
-                await self.train(UnitTypeId.ZERGLING)
+                self.train(UnitTypeId.ZERGLING)
 
             if self.should_build(UnitTypeId.SPAWNINGPOOL):
                 p: Point2 = self.townhalls.furthest_to(self.start_location).position.random_on_distance(3)
