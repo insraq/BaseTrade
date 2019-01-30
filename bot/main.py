@@ -170,7 +170,7 @@ class MyBot(sc2.BotAI):
                     self.actions.append(unit.move(self.rally_point))
                 elif unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
-                elif not unit.type_id == UnitTypeId.OVERSEER:
+                elif unit.type_id == UnitTypeId.OVERSEER:
                     self.actions.append(unit.move(self.forces.center))
                 elif not unit.is_attacking:
                     self.actions.append(unit.attack(self.attack_target))
@@ -562,6 +562,7 @@ class MyBot(sc2.BotAI):
     def attack_target(self):
         if self.known_enemy_structures.exists:
             target = self.known_enemy_structures.furthest_to(self.enemy_start_locations[0])
+            print("attack target:", target)
             return target.position
         return self.enemy_start_locations[0]
 
@@ -570,7 +571,9 @@ class MyBot(sc2.BotAI):
             t: Unit = t
             e: Units = self.visible_enemy_units.closer_than(20, t.position)
             if e.visible.amount > 0:
-                return e.closest_to(t.position)
+                n = e.closest_to(t.position)
+                print("enemy nearby:", n)
+                return n
         return None
 
     @property_cache_once_per_frame
