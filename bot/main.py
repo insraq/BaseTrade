@@ -353,13 +353,14 @@ class MyBot(sc2.BotAI):
 
         # second overlord scout
         o: Units = self.units.tags_in({self.second_overlord_tag})
-        if o.exists and o.first.is_idle:
-            self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 5), queue=True))
-            self.actions.append(o.first.patrol(self.rally_point.towards(self.game_info.map_center, 20), queue=True))
-        else:
+        if not o.exists:
             o: Units = self.units(UnitTypeId.OVERLORD).tags_not_in({self.first_overlord_tag})
             if o.exists:
                 self.second_overlord_tag = o.first.tag
+        elif o.first.is_idle:
+            self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 5), queue=True))
+            self.actions.append(o.first.patrol(self.rally_point.towards(self.game_info.map_center, 20), queue=True))
+
 
         # extractor and gas gathering
         if self.should_build_extractor():
