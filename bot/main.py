@@ -504,8 +504,6 @@ class MyBot(sc2.BotAI):
     @property_cache_once_per_frame
     def est_surplus_forces(self):
         forces_supply = self.supply_used - self.count_unit(UnitTypeId.DRONE) - self.count_unit(UnitTypeId.QUEEN) * 2
-        print("me:", forces_supply, "enemy:", self.enemy_forces_supply, "dist:", self.enemy_forces_distance,
-              "approaching:", self.enemy_forces_approaching)
         return forces_supply - self.enemy_forces_supply
 
     @property_cache_once_per_frame
@@ -643,6 +641,8 @@ class MyBot(sc2.BotAI):
         for s in self.units_attacked_tags:
             tags_union = tags_union | s
         self.units_attacked = self.units.tags_in(tags_union)
+        print("surplus", self.surplus_forces, "est_surplus:", self.est_surplus_forces,
+              "dist:", self.enemy_forces_distance, "approaching:", self.enemy_forces_approaching)
 
     async def produce_unit(self):
         if self.supply_left == 0:
