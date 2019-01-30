@@ -505,9 +505,6 @@ class MyBot(sc2.BotAI):
         forces_supply = self.units.of_type({UnitTypeId.ZERGLING, UnitTypeId.BANELING}).amount * 0.5 + \
                         self.units.of_type({UnitTypeId.ROACH, UnitTypeId.HYDRALISK, UnitTypeId.INFESTOR}).amount * 2 + \
                         self.units.of_type({UnitTypeId.SWARMHOSTMP}).amount * 3
-        if self.iteration % 10 == 0:
-            print("me:", forces_supply, "enemy:", self.enemy_forces_supply, "distance:", self.enemy_forces_distance)
-            print(self.enemy_forces_stat)
         return forces_supply - self.enemy_forces_supply
 
     async def upgrade_building(self):
@@ -556,7 +553,6 @@ class MyBot(sc2.BotAI):
     def attack_target(self):
         if self.known_enemy_structures.exists:
             target = self.known_enemy_structures.furthest_to(self.enemy_start_locations[0])
-            print(target)
             return target.position
         return self.enemy_start_locations[0]
 
