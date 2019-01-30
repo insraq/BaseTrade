@@ -34,9 +34,11 @@ class MyBot(sc2.BotAI):
         self.enemy_forces: Dict[int, Unit] = {}
         self.enemy_forces_supply: float = 0
         self.enemy_forces_stat: Dict[UnitTypeId, int] = 0
-        self.enemy_forces_distance: float = None
+        self.enemy_forces_distance: float = -1
+        self.enemy_forces_approaching: bool = False
         self.enemy_has_changed = False
         self.first_overlord_tag = 0
+        self.second_overlord_tag = 0
         self.iteration = 0
         self.reached_full_supply = False
 
@@ -151,12 +153,13 @@ class MyBot(sc2.BotAI):
                         sc.closest_distance_to(unit.position) > 15:
                     self.actions.append(unit.attack(enemy_nearby.position))
                     continue
+
                 if sc.filter(lambda u: u.is_ready and u.is_attacking).exists or \
                         self.units_attacked.of_type(UnitTypeId.SPINECRAWLER).exists:
                     self.actions.append(unit.attack(enemy_nearby.position))
                 else:
                     self.actions.append(unit.move(self.start_location))
-            if self.enemy_forces_distance < half_size:
+            if 0 < self.enemy_forces_distance < half_size:
                 for unit in self.units(UnitTypeId.SWARMHOSTMP).ready:
                     abilities = (await self.get_available_abilities([unit]))[0]
                     if AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
@@ -272,7 +275,7 @@ class MyBot(sc2.BotAI):
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
                 (self.est_surplus_forces > 0 or self.townhalls.amount < 2 or
-                 self.enemy_forces_distance > half_size and self.est_surplus_forces > -self.supply_used / 10):
+                 not self.enemy_forces_approaching and self.est_surplus_forces > -self.supply_used / 10):
             self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
@@ -283,7 +286,7 @@ class MyBot(sc2.BotAI):
         if self.units(UnitTypeId.ROACHWARREN).ready.exists and not self.units(
                 UnitTypeId.HYDRALISKDEN).ready.exists and self.count_unit(UnitTypeId.ROACH) < 10:
             self.production_order.append(UnitTypeId.ROACH)
-        else:
+        elif self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
             self.production_order.extend([UnitTypeId.HYDRALISK])
         # swarm host
         if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.SWARMHOSTMP) < 10:
@@ -295,11 +298,7 @@ class MyBot(sc2.BotAI):
         zergling_amount = self.units(UnitTypeId.ZERGLING).amount + 2 * self.already_pending(UnitTypeId.ZERGLING)
         if self.townhalls.ready.amount == 1 and zergling_amount < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
             self.production_order.insert(0, UnitTypeId.ZERGLING)
-        elif zergling_amount < self.townhalls.amount * 6:
-            self.production_order.append(UnitTypeId.ZERGLING)
-        if self.already_pending_upgrade(UpgradeId.ZERGLINGATTACKSPEED) == 1 and zergling_amount < 30:
-            self.production_order.append(UnitTypeId.ZERGLING)
-        if UnitTypeId.BANELINGNEST in self.build_order and (zergling_amount < self.townhalls.ready.amount * 10):
+        else:
             self.production_order.append(UnitTypeId.ZERGLING)
         # banelings
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
@@ -350,9 +349,15 @@ class MyBot(sc2.BotAI):
             ])
 
         # second overlord scout
-        o: Units = self.units(UnitTypeId.OVERLORD).idle
-        if self.units(UnitTypeId.OVERLORD).amount == 2 and o.exists:
-            self.actions.append(o.first.move(self.start_location.towards(self.game_info.map_center, 10), queue=True))
+        if self.units(UnitTypeId.OVERLORD).amount == 2:
+            o: Units = self.units(UnitTypeId.OVERLORD).tags_not_in({self.first_overlord_tag})
+            if o.exists:
+                self.second_overlord_tag = o.first.tag
+
+        o: Units = self.units.tags_in({self.second_overlord_tag})
+        if o.exists and o.first.is_idle:
+            self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 5), queue=True))
+            self.actions.append(o.first.patrol(self.rally_point.towards(self.game_info.map_center, 20), queue=True))
 
         # extractor and gas gathering
         if self.should_build_extractor():
@@ -498,6 +503,8 @@ class MyBot(sc2.BotAI):
     @property_cache_once_per_frame
     def est_surplus_forces(self):
         forces_supply = self.supply_used - self.count_unit(UnitTypeId.DRONE) - self.count_unit(UnitTypeId.QUEEN) * 2
+        print("me:", forces_supply, "enemy:", self.enemy_forces_supply, "dist:", self.enemy_forces_distance,
+              "approaching:", self.enemy_forces_approaching)
         return forces_supply - self.enemy_forces_supply
 
     @property_cache_once_per_frame
@@ -582,9 +589,6 @@ class MyBot(sc2.BotAI):
             UnitTypeId.PLANETARYFORTRESS
         })
 
-        if self.enemy_forces_distance is None:
-            self.enemy_forces_distance = self.start_location.distance_to(self.enemy_start_locations[0])
-
         for e in self.known_enemy_units:
             e: Unit = e
             if e.type_id not in self.enemy_unit_history:
@@ -608,7 +612,9 @@ class MyBot(sc2.BotAI):
             if self.enemy_has_changed:
                 distance += v.distance_to(self.start_location)
         if distance > 0 and len(self.enemy_forces) > 0:
-            self.enemy_forces_distance = distance / len(self.enemy_forces)
+            avg = distance / len(self.enemy_forces)
+            self.enemy_forces_approaching = avg <= self.enemy_forces_distance
+            self.enemy_forces_distance = avg
 
         self.enemy_has_changed = False
 
@@ -618,7 +624,7 @@ class MyBot(sc2.BotAI):
         units_attacked = set()
         for w in self.units.filter(not_full_health):
             w: Unit = w
-            if (w.tag in self.units_health and w.health > self.units_health[w.tag]) or w.tag not in self.units_health:
+            if (w.tag in self.units_health and w.health < self.units_health[w.tag]) or w.tag not in self.units_health:
                 units_attacked.add(w.tag)
             self.units_health[w.tag] = w.health
 
