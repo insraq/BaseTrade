@@ -180,8 +180,7 @@ class MyBot(sc2.BotAI):
                 if unit.type_id == UnitTypeId.BANELING and \
                         unit.is_attacking and self.visible_enemy_units.closer_than(5, unit).exists:
                     continue
-                if not unit.is_moving:
-                    self.actions.append(unit.move(self.rally_point))
+                self.actions.append(unit.move(self.rally_point))
         swarmhost = self.units(UnitTypeId.SWARMHOSTMP).ready
         sa = []
         if swarmhost.amount >= 5:
