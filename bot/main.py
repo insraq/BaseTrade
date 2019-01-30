@@ -170,6 +170,8 @@ class MyBot(sc2.BotAI):
                     self.actions.append(unit.move(self.rally_point))
                 elif unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
+                elif not unit.can_attack:
+                    self.actions.append(unit.move(self.forces.center))
                 elif not unit.is_attacking:
                     self.actions.append(unit.attack(self.attack_target))
 
@@ -561,7 +563,6 @@ class MyBot(sc2.BotAI):
     def attack_target(self):
         if self.known_enemy_structures.exists:
             target = self.known_enemy_structures.furthest_to(self.enemy_start_locations[0])
-            print(target)
             return target.position
         return self.enemy_start_locations[0]
 
@@ -576,8 +577,7 @@ class MyBot(sc2.BotAI):
     @property_cache_once_per_frame
     def visible_enemy_units(self) -> Units:
         def alive_and_can_attack(u: Unit) -> bool:
-            return u.health > 0 and u.can_attack and not u.is_structure
-
+            return u.health > 0 and u.can_attack and not u._type_data._proto.food_required > 0
         return self.known_enemy_units.filter(alive_and_can_attack)
 
     def calc_enemy_info(self):
