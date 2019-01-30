@@ -274,9 +274,10 @@ class MyBot(sc2.BotAI):
             UnitTypeId.EXTRACTOR).amount * 3
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.est_surplus_forces > 0 or self.townhalls.amount < 2 or
-                 not self.enemy_forces_approaching and self.est_surplus_forces > -self.supply_used / 10):
-            self.production_order.append(UnitTypeId.DRONE)
+                (self.est_surplus_forces > 0 or self.townhalls.amount < 2 or (
+                        not self.enemy_forces_approaching and self.est_surplus_forces > -self.supply_used / 10)):
+            for i in range(round(self.minerals / 50)):
+                self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
         # infestor
@@ -560,11 +561,12 @@ class MyBot(sc2.BotAI):
     def attack_target(self):
         if self.known_enemy_structures.exists:
             target = self.known_enemy_structures.furthest_to(self.enemy_start_locations[0])
+            print(target)
             return target.position
         return self.enemy_start_locations[0]
 
     def enemy_nearby(self):
-        for t in self.townhalls.ready:
+        for t in self.townhalls:
             t: Unit = t
             e: Units = self.visible_enemy_units.closer_than(20, t.position)
             if e.visible.amount > 0:
@@ -662,11 +664,15 @@ class MyBot(sc2.BotAI):
 
         can_afford = self.can_afford(u)
         if not can_afford.can_afford_minerals:
-            self.production_order = []
+            if UnitTypeId.DRONE in self.production_order:
+                self.production_order = [UnitTypeId.DRONE]
+            else:
+                self.production_order = []
         if not can_afford.can_afford_vespene:
             remove_if_exists(self.production_order, UnitTypeId.ROACH)
             remove_if_exists(self.production_order, UnitTypeId.HYDRALISK)
             remove_if_exists(self.production_order, UnitTypeId.MUTALISK)
+            remove_if_exists(self.production_order, UnitTypeId.INFESTOR)
             remove_if_exists(self.production_order, UnitTypeId.SWARMHOSTMP)
         return can_afford
 
