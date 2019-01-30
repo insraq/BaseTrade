@@ -170,7 +170,7 @@ class MyBot(sc2.BotAI):
                     self.actions.append(unit.move(self.rally_point))
                 elif unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
-                elif not unit.can_attack:
+                elif not unit.type_id == UnitTypeId.OVERSEER:
                     self.actions.append(unit.move(self.forces.center))
                 elif not unit.is_attacking:
                     self.actions.append(unit.attack(self.attack_target))
@@ -360,7 +360,6 @@ class MyBot(sc2.BotAI):
         elif o.first.is_idle:
             self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 5), queue=True))
             self.actions.append(o.first.patrol(self.rally_point.towards(self.game_info.map_center, 20), queue=True))
-
 
         # extractor and gas gathering
         if self.should_build_extractor():
@@ -577,7 +576,8 @@ class MyBot(sc2.BotAI):
     @property_cache_once_per_frame
     def visible_enemy_units(self) -> Units:
         def alive_and_can_attack(u: Unit) -> bool:
-            return u.health > 0 and u.can_attack and u._type_data._proto.food_required > 0
+            return u.health > 0 and not u.is_structure and u._type_data._proto.food_required > 0
+
         return self.known_enemy_units.filter(alive_and_can_attack)
 
     def calc_enemy_info(self):
@@ -595,9 +595,9 @@ class MyBot(sc2.BotAI):
             e: Unit = e
             if e.type_id not in self.enemy_unit_history:
                 self.enemy_unit_history[e.type_id] = set()
-            if e.health > 0 and not e.is_structure and e.can_attack and e.type_id not in {UnitTypeId.DRONE,
-                                                                                          UnitTypeId.SCV,
-                                                                                          UnitTypeId.PROBE}:
+            if e.health > 0 and not e.is_structure and e.type_id not in {UnitTypeId.DRONE,
+                                                                         UnitTypeId.SCV,
+                                                                         UnitTypeId.PROBE}:
                 self.enemy_forces[e.tag] = e
                 self.enemy_has_changed = True
             self.enemy_unit_history[e.type_id].add(e.tag)
@@ -615,7 +615,10 @@ class MyBot(sc2.BotAI):
                 distance += v.distance_to(self.start_location)
         if distance > 0 and len(self.enemy_forces) > 0:
             avg = distance / len(self.enemy_forces)
-            self.enemy_forces_approaching = avg <= self.enemy_forces_distance
+            if avg < self.enemy_forces_distance:
+                self.enemy_forces_approaching = True
+            if avg > self.enemy_forces_distance:
+                self.enemy_forces_approaching = False
             self.enemy_forces_distance = avg
 
         self.enemy_has_changed = False
