@@ -151,12 +151,12 @@ class MyBot(sc2.BotAI):
                 if not sc.exists or \
                         sc.closest_distance_to(self.rally_point) > 15 or \
                         sc.closest_distance_to(unit.position) > 15:
-                    self.actions.append(unit.attack(enemy_nearby.position))
+                    self.move_and_attack(unit, enemy_nearby.position)
                     continue
 
                 if sc.filter(lambda u: u.is_ready and u.is_attacking).exists or \
                         self.units_attacked.of_type(UnitTypeId.SPINECRAWLER).exists:
-                    self.actions.append(unit.attack(enemy_nearby.position))
+                    self.move_and_attack(unit, enemy_nearby.position)
                 else:
                     self.actions.append(unit.move(self.start_location))
             if 0 < self.enemy_forces_distance < half_size:
@@ -172,8 +172,8 @@ class MyBot(sc2.BotAI):
                     self.infestor_cast(unit)
                 elif unit.type_id == UnitTypeId.OVERSEER:
                     self.actions.append(unit.move(self.forces.center))
-                elif not unit.is_attacking:
-                    self.actions.append(unit.attack(self.attack_target))
+                else:
+                    self.move_and_attack(unit, self.attack_target)
 
         else:
             for unit in self.forces.further_than(10, self.rally_point):
@@ -469,6 +469,27 @@ class MyBot(sc2.BotAI):
                 return t
         return None
 
+    def move_and_attack(self, u: Unit, t: Point2):
+        banelings: Units = self.visible_enemy_units.of_type({UnitTypeId.BANELING}).closer_than(4, u.position)
+        if banelings.exists:
+            b = banelings.closest_to(u.position)
+            self.actions.append(u.move(backwards(u.position, b.position, 4)))
+            if u.ground_range > 1:
+                self.actions.append(u.attack(b, queue=True))
+            return
+        if u.ground_range < 1:
+            self.actions.append(u.attack(t))
+            return
+        enemy: Units = self.visible_enemy_units.closer_than(10, u.position)
+        if enemy.exists and u.weapon_cooldown > 0:
+            c = enemy.closest_to(u.position)
+            self.actions.extend([
+                u.move(backwards(u.position, c.position, u.movement_speed * u.weapon_cooldown)),
+                u.attack(c.position, queue=True)
+            ])
+        else:
+            self.actions.append(u.attack(t))
+
     @property_cache_once_per_frame
     def empty_workers(self) -> Units:
         def has_no_resource(u: Unit):
@@ -733,7 +754,7 @@ class MyBot(sc2.BotAI):
             o: Unit = o
             if o.health_percentage > 0.5:
                 return
-        self.actions.append(self.units(UnitTypeId.OVERLORD).random(AbilityId.MORPH_OVERSEER))
+        self.actions.append(self.units(UnitTypeId.OVERLORD).idle.random(AbilityId.MORPH_OVERSEER))
 
     def need_worker_mineral(self):
         t = self.townhalls.ready.filter(lambda a: a.assigned_harvesters < a.ideal_harvesters)
@@ -935,3 +956,8 @@ class MyBot(sc2.BotAI):
                         f.attack(self.enemy_expansions.closest_to(self.enemy_start_locations[0]).position, queue=True))
                 else:
                     self.actions.append(f.attack(self.enemy_start_locations[0], queue=True))
+
+
+def backwards(f: Point2, t: Point2, distance: Union[float, int]) -> Point2:
+    t = f.towards(t, distance)
+    return Point2((2 * f.x - t.x, 2 * f.y - t.y))
