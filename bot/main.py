@@ -935,3 +935,11 @@ class MyBot(sc2.BotAI):
                         f.attack(self.enemy_expansions.closest_to(self.enemy_start_locations[0]).position, queue=True))
                 else:
                     self.actions.append(f.attack(self.enemy_start_locations[0], queue=True))
+
+
+def backwards(self: Point2, p: Point2, distance: Union[float, int]):
+    t = self.towards(p, distance)
+    return Point2((2 * self.x - t.x, 2 * self.y - t.y))
+
+
+Point2.backwards = backwards

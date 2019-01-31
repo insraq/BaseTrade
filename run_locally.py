@@ -17,8 +17,8 @@ def main():
     race = Race[info["race"]]
     run_game(maps.get("(2)LostAndFoundLE"), [
         Bot(race, MyBot()),
-        # Bot(Race.Zerg, ZergRushBot()),
-        Computer(Race.Random, Difficulty.VeryHard),
+        Bot(Race.Zerg, ZergRushBot()),
+        # Computer(Race.Random, Difficulty.VeryHard),
     ], realtime=False, step_time_limit={"time_limit": 2, "window_size": 10, "penalty": 10}, game_time_limit=(60 * 30),
              save_replay_as="test.SC2Replay")
 
