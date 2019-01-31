@@ -8,7 +8,7 @@ from sc2 import Race
 from sc2.cache import property_cache_once_per_frame
 from sc2.constants import *
 from sc2.position import Point2, Rect
-from sc2.unit import Unit
+from sc2.unit import Unit, UnitOrder
 from sc2.units import Units
 
 
@@ -180,6 +180,8 @@ class MyBot(sc2.BotAI):
                 if unit.type_id == UnitTypeId.BANELING and \
                         unit.is_attacking and self.visible_enemy_units.closer_than(5, unit).exists:
                     continue
+                if unit.type_id == UnitTypeId.OVERSEER and has_order(unit, AbilityId.SPAWNCHANGELING_SPAWNCHANGELING):
+                    continue
                 self.actions.append(unit.move(self.rally_point))
         swarmhost = self.units(UnitTypeId.SWARMHOSTMP).ready
         sa = []
@@ -243,6 +245,20 @@ class MyBot(sc2.BotAI):
             else:
                 self.actions.append(x.move(self.rally_point))
 
+        overseers = self.units(UnitTypeId.OVERSEER)
+        if overseers.exists:
+            abilities: List[List[AbilityId]] = await self.get_available_abilities(overseers)
+            for i, a in enumerate(abilities):
+                if AbilityId.SPAWNCHANGELING_SPAWNCHANGELING in a:
+                    u: Unit = overseers[i]
+                    if u.distance_to(self.enemy_start_locations[0]) > half_size:
+                        self.actions.append(u.move(self.attack_target.towards(self.game_info.map_center, 20)))
+                    self.actions.append(u(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING, queue=True))
+
+        changelings = self.units(UnitTypeId.CHANGELING).idle
+        if changelings.exists:
+            self.actions.append(changelings.first.move(self.enemy_start_locations[0]))
+
         # counter timing attack
         if await self.defend_early_rush():
             await self.do_actions(self.actions)
@@ -285,7 +301,7 @@ class MyBot(sc2.BotAI):
         if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.INFESTOR) < 3:
             self.production_order.append(UnitTypeId.INFESTOR)
 
-        if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
+        if self.units(UnitTypeId.HYDRALISKDEN).ready.exists and self.can_afford(UnitTypeId.HYDRALISK):
             self.production_order.extend([UnitTypeId.HYDRALISK])
         elif self.units(UnitTypeId.ROACHWARREN).ready.exists:
             self.production_order.append(UnitTypeId.ROACH)
@@ -298,13 +314,12 @@ class MyBot(sc2.BotAI):
                 self.production_order.append(UnitTypeId.SWARMHOSTMP)
 
         # zerglings
-        zergling_amount = self.units(UnitTypeId.ZERGLING).amount + 2 * self.already_pending(UnitTypeId.ZERGLING)
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
-            if self.townhalls.ready.amount == 1 and zergling_amount < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
+            if self.townhalls.ready.amount == 1 and self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(
+                    UnitTypeId.XELNAGATOWER).amount:
                 self.production_order.insert(0, UnitTypeId.ZERGLING)
-            elif self.minerals - self.vespene > 100:
+            else:
                 self.production_order.append(UnitTypeId.ZERGLING)
-
 
         # banelings
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
@@ -578,7 +593,8 @@ class MyBot(sc2.BotAI):
         return not self.units(b).exists and self.already_pending(b) == 0 and self.can_afford(b)
 
     def count_unit(self, unit_type: UnitTypeId) -> int:
-        return self.units(unit_type).amount + self.already_pending(unit_type, all_units=True)
+        factor = 2 if unit_type == UnitTypeId.ZERGLING else 1
+        return self.units(unit_type).amount + factor * self.already_pending(unit_type, all_units=True)
 
     @property_cache_once_per_frame
     def attack_target(self):
@@ -965,3 +981,11 @@ class MyBot(sc2.BotAI):
 def backwards(f: Point2, t: Point2, distance: Union[float, int]) -> Point2:
     t = f.towards(t, distance)
     return Point2((2 * f.x - t.x, 2 * f.y - t.y))
+
+
+def has_order(u: Unit, ability_id: AbilityId):
+    for o in u.orders:
+        o: UnitOrder = o
+        if o.ability == ability_id:
+            return True
+    return False
