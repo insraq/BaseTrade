@@ -356,9 +356,9 @@ class MyBot(sc2.BotAI):
             o: Units = self.units(UnitTypeId.OVERLORD).tags_not_in({self.first_overlord_tag})
             if o.exists:
                 self.second_overlord_tag = o.first.tag
-        elif o.first.is_idle:
+        elif o.first.is_idle and o.first.health_percentage >= 0.1:
             self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 5), queue=True))
-            self.actions.append(o.first.patrol(self.rally_point.towards(self.game_info.map_center, 20), queue=True))
+            self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 25), queue=True))
 
         # extractor and gas gathering
         if self.should_build_extractor():
