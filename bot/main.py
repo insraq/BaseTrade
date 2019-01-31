@@ -110,17 +110,17 @@ class MyBot(sc2.BotAI):
         is_protoss = self.enemy_race == Race.Protoss or \
                      (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Protoss)
 
-        if is_zerg:
+        if is_terran:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
-                UnitTypeId.ROACHWARREN,
+                UnitTypeId.BANELINGNEST,
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
         else:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
-                UnitTypeId.BANELINGNEST,
+                UnitTypeId.ROACHWARREN,
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
@@ -284,24 +284,28 @@ class MyBot(sc2.BotAI):
         # infestor
         if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.INFESTOR) < 3:
             self.production_order.append(UnitTypeId.INFESTOR)
-        # roach and hydra
-        if self.units(UnitTypeId.ROACHWARREN).ready.exists and not self.units(
-                UnitTypeId.HYDRALISKDEN).ready.exists and self.count_unit(UnitTypeId.ROACH) < 10:
-            self.production_order.append(UnitTypeId.ROACH)
-        elif self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
+
+        if self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
             self.production_order.extend([UnitTypeId.HYDRALISK])
+        elif self.units(UnitTypeId.ROACHWARREN).ready.exists:
+            self.production_order.append(UnitTypeId.ROACH)
+
         # swarm host
         if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.SWARMHOSTMP) < 10:
             if self.supply_used > 150:
                 self.production_order = [UnitTypeId.SWARMHOSTMP]
             else:
                 self.production_order.append(UnitTypeId.SWARMHOSTMP)
+
         # zerglings
         zergling_amount = self.units(UnitTypeId.ZERGLING).amount + 2 * self.already_pending(UnitTypeId.ZERGLING)
-        if self.townhalls.ready.amount == 1 and zergling_amount < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
-            self.production_order.insert(0, UnitTypeId.ZERGLING)
-        else:
-            self.production_order.append(UnitTypeId.ZERGLING)
+        if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
+            if self.townhalls.ready.amount == 1 and zergling_amount < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
+                self.production_order.insert(0, UnitTypeId.ZERGLING)
+            elif self.minerals - self.vespene > 100:
+                self.production_order.append(UnitTypeId.ZERGLING)
+
+
         # banelings
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
             b = (self.count_enemy_unit(UnitTypeId.MARINE) + self.count_enemy_unit(
@@ -540,11 +544,11 @@ class MyBot(sc2.BotAI):
         if self.est_surplus_forces < 0:
             return
         for b in self.build_order:
-            if b == UnitTypeId.ROACHWARREN:
-                continue
-            u = self.units(b).ready
-            if u.exists and u.first.is_idle:
+            u = self.units(b).ready.idle
+            if u.exists:
                 abilities = await self.get_available_abilities(u.first, ignore_resource_requirements=True)
+                if AbilityId.RESEARCH_GLIALREGENERATION in abilities:
+                    abilities.remove(AbilityId.RESEARCH_GLIALREGENERATION)
                 if len(abilities) > 0 and self.can_afford_or_change_production(abilities[0]):
                     self.actions.append(u.first(abilities[0]))
 
