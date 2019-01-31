@@ -251,7 +251,7 @@ class MyBot(sc2.BotAI):
             for i, a in enumerate(abilities):
                 if AbilityId.SPAWNCHANGELING_SPAWNCHANGELING in a:
                     u: Unit = overseers[i]
-                    if u.distance_to(self.enemy_start_locations[0]) > half_size:
+                    if u.distance_to(self.attack_target) > 20:
                         self.actions.append(u.move(self.attack_target.towards(self.game_info.map_center, 20)))
                     self.actions.append(u(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING, queue=True))
 
