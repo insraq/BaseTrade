@@ -8,7 +8,7 @@ from sc2 import Race
 from sc2.cache import property_cache_once_per_frame
 from sc2.constants import *
 from sc2.position import Point2, Rect
-from sc2.unit import Unit
+from sc2.unit import Unit, UnitOrder
 from sc2.units import Units
 
 
@@ -110,17 +110,17 @@ class MyBot(sc2.BotAI):
         is_protoss = self.enemy_race == Race.Protoss or \
                      (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Protoss)
 
-        if is_zerg:
+        if is_terran:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
-                UnitTypeId.ROACHWARREN,
+                UnitTypeId.BANELINGNEST,
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
         else:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
-                UnitTypeId.BANELINGNEST,
+                UnitTypeId.ROACHWARREN,
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
@@ -151,12 +151,12 @@ class MyBot(sc2.BotAI):
                 if not sc.exists or \
                         sc.closest_distance_to(self.rally_point) > 15 or \
                         sc.closest_distance_to(unit.position) > 15:
-                    self.actions.append(unit.attack(enemy_nearby.position))
+                    self.move_and_attack(unit, enemy_nearby.position)
                     continue
 
                 if sc.filter(lambda u: u.is_ready and u.is_attacking).exists or \
                         self.units_attacked.of_type(UnitTypeId.SPINECRAWLER).exists:
-                    self.actions.append(unit.attack(enemy_nearby.position))
+                    self.move_and_attack(unit, enemy_nearby.position)
                 else:
                     self.actions.append(unit.move(self.start_location))
             if 0 < self.enemy_forces_distance < half_size:
@@ -172,13 +172,15 @@ class MyBot(sc2.BotAI):
                     self.infestor_cast(unit)
                 elif unit.type_id == UnitTypeId.OVERSEER:
                     self.actions.append(unit.move(self.forces.center))
-                elif not unit.is_attacking:
-                    self.actions.append(unit.attack(self.attack_target))
+                else:
+                    self.move_and_attack(unit, self.attack_target)
 
         else:
             for unit in self.forces.further_than(10, self.rally_point):
                 if unit.type_id == UnitTypeId.BANELING and \
                         unit.is_attacking and self.visible_enemy_units.closer_than(5, unit).exists:
+                    continue
+                if unit.type_id == UnitTypeId.OVERSEER and has_order(unit, AbilityId.SPAWNCHANGELING_SPAWNCHANGELING):
                     continue
                 self.actions.append(unit.move(self.rally_point))
         swarmhost = self.units(UnitTypeId.SWARMHOSTMP).ready
@@ -243,6 +245,20 @@ class MyBot(sc2.BotAI):
             else:
                 self.actions.append(x.move(self.rally_point))
 
+        overseers = self.units(UnitTypeId.OVERSEER)
+        if overseers.exists:
+            abilities: List[List[AbilityId]] = await self.get_available_abilities(overseers)
+            for i, a in enumerate(abilities):
+                if AbilityId.SPAWNCHANGELING_SPAWNCHANGELING in a:
+                    u: Unit = overseers[i]
+                    if u.distance_to(self.attack_target) > 20:
+                        self.actions.append(u.move(self.attack_target.towards(self.game_info.map_center, 20)))
+                    self.actions.append(u(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING, queue=True))
+
+        changelings = self.units(UnitTypeId.CHANGELING).idle
+        if changelings.exists:
+            self.actions.append(changelings.first.move(self.enemy_start_locations[0]))
+
         # counter timing attack
         if await self.defend_early_rush():
             await self.do_actions(self.actions)
@@ -284,24 +300,27 @@ class MyBot(sc2.BotAI):
         # infestor
         if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.INFESTOR) < 3:
             self.production_order.append(UnitTypeId.INFESTOR)
-        # roach and hydra
-        if self.units(UnitTypeId.ROACHWARREN).ready.exists and not self.units(
-                UnitTypeId.HYDRALISKDEN).ready.exists and self.count_unit(UnitTypeId.ROACH) < 10:
-            self.production_order.append(UnitTypeId.ROACH)
-        elif self.units(UnitTypeId.HYDRALISKDEN).ready.exists:
+
+        if self.units(UnitTypeId.HYDRALISKDEN).ready.exists and self.can_afford(UnitTypeId.HYDRALISK):
             self.production_order.extend([UnitTypeId.HYDRALISK])
+        elif self.units(UnitTypeId.ROACHWARREN).ready.exists:
+            self.production_order.append(UnitTypeId.ROACH)
+
         # swarm host
         if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.SWARMHOSTMP) < 10:
             if self.supply_used > 150:
                 self.production_order = [UnitTypeId.SWARMHOSTMP]
             else:
                 self.production_order.append(UnitTypeId.SWARMHOSTMP)
+
         # zerglings
-        zergling_amount = self.units(UnitTypeId.ZERGLING).amount + 2 * self.already_pending(UnitTypeId.ZERGLING)
-        if self.townhalls.ready.amount == 1 and zergling_amount < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
-            self.production_order.insert(0, UnitTypeId.ZERGLING)
-        else:
-            self.production_order.append(UnitTypeId.ZERGLING)
+        if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
+            if self.townhalls.ready.amount == 1 and self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(
+                    UnitTypeId.XELNAGATOWER).amount:
+                self.production_order.insert(0, UnitTypeId.ZERGLING)
+            else:
+                self.production_order.append(UnitTypeId.ZERGLING)
+
         # banelings
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
             b = (self.count_enemy_unit(UnitTypeId.MARINE) + self.count_enemy_unit(
@@ -469,6 +488,27 @@ class MyBot(sc2.BotAI):
                 return t
         return None
 
+    def move_and_attack(self, u: Unit, t: Point2):
+        banelings: Units = self.visible_enemy_units.of_type({UnitTypeId.BANELING}).closer_than(4, u.position)
+        if banelings.exists:
+            b = banelings.closest_to(u.position)
+            self.actions.append(u.move(backwards(u.position, b.position, 4)))
+            if u.ground_range > 1:
+                self.actions.append(u.attack(b, queue=True))
+            return
+        if u.ground_range < 1:
+            self.actions.append(u.attack(t))
+            return
+        enemy: Units = self.visible_enemy_units.closer_than(10, u.position)
+        if enemy.exists and u.weapon_cooldown > 0:
+            c = enemy.closest_to(u.position)
+            self.actions.extend([
+                u.move(backwards(u.position, c.position, u.movement_speed * u.weapon_cooldown)),
+                u.attack(c.position, queue=True)
+            ])
+        else:
+            self.actions.append(u.attack(t))
+
     @property_cache_once_per_frame
     def empty_workers(self) -> Units:
         def has_no_resource(u: Unit):
@@ -519,11 +559,11 @@ class MyBot(sc2.BotAI):
         if self.est_surplus_forces < 0:
             return
         for b in self.build_order:
-            if b == UnitTypeId.ROACHWARREN:
-                continue
-            u = self.units(b).ready
-            if u.exists and u.first.is_idle:
+            u = self.units(b).ready.idle
+            if u.exists:
                 abilities = await self.get_available_abilities(u.first, ignore_resource_requirements=True)
+                if AbilityId.RESEARCH_GLIALREGENERATION in abilities:
+                    abilities.remove(AbilityId.RESEARCH_GLIALREGENERATION)
                 if len(abilities) > 0 and self.can_afford_or_change_production(abilities[0]):
                     self.actions.append(u.first(abilities[0]))
 
@@ -553,7 +593,8 @@ class MyBot(sc2.BotAI):
         return not self.units(b).exists and self.already_pending(b) == 0 and self.can_afford(b)
 
     def count_unit(self, unit_type: UnitTypeId) -> int:
-        return self.units(unit_type).amount + self.already_pending(unit_type, all_units=True)
+        factor = 2 if unit_type == UnitTypeId.ZERGLING else 1
+        return self.units(unit_type).amount + factor * self.already_pending(unit_type, all_units=True)
 
     @property_cache_once_per_frame
     def attack_target(self):
@@ -733,7 +774,7 @@ class MyBot(sc2.BotAI):
             o: Unit = o
             if o.health_percentage > 0.5:
                 return
-        self.actions.append(self.units(UnitTypeId.OVERLORD).random(AbilityId.MORPH_OVERSEER))
+        self.actions.append(self.units(UnitTypeId.OVERLORD).idle.random(AbilityId.MORPH_OVERSEER))
 
     def need_worker_mineral(self):
         t = self.townhalls.ready.filter(lambda a: a.assigned_harvesters < a.ideal_harvesters)
@@ -937,9 +978,14 @@ class MyBot(sc2.BotAI):
                     self.actions.append(f.attack(self.enemy_start_locations[0], queue=True))
 
 
-def backwards(self: Point2, p: Point2, distance: Union[float, int]):
-    t = self.towards(p, distance)
-    return Point2((2 * self.x - t.x, 2 * self.y - t.y))
+def backwards(f: Point2, t: Point2, distance: Union[float, int]) -> Point2:
+    t = f.towards(t, distance)
+    return Point2((2 * f.x - t.x, 2 * f.y - t.y))
 
 
-Point2.backwards = backwards
+def has_order(u: Unit, ability_id: AbilityId):
+    for o in u.orders:
+        o: UnitOrder = o
+        if o.ability == ability_id:
+            return True
+    return False
