@@ -141,6 +141,9 @@ class MyBot(sc2.BotAI):
         # attacks
         enemy_nearby = self.enemy_nearby()
         if enemy_nearby:
+            if self.forces.amount == 0:
+                for w in self.workers:
+                    self.actions.append(w.attack(self.enemy_start_locations[0]))
             for unit in self.forces:
                 unit: Unit = unit
                 if unit.type_id == UnitTypeId.INFESTOR:
@@ -176,6 +179,9 @@ class MyBot(sc2.BotAI):
                     self.move_and_attack(unit, self.attack_target)
 
         else:
+            for w in self.workers:
+                if w.is_attacking:
+                    self.actions.append(w.stop())
             for unit in self.forces.further_than(10, self.rally_point):
                 if unit.type_id == UnitTypeId.BANELING and \
                         unit.is_attacking and self.visible_enemy_units.closer_than(5, unit).exists:
@@ -412,8 +418,7 @@ class MyBot(sc2.BotAI):
         # drone
         for d in self.units(UnitTypeId.DRONE).idle:
             d: Unit = d
-            mf = self.state.mineral_field.closest_to(d.position)
-            self.actions.append(d.gather(mf))
+            self.actions.append(d.gather(self.need_worker_mineral))
 
         await self.build_building()
         await self.upgrade_building()
@@ -457,7 +462,7 @@ class MyBot(sc2.BotAI):
 
     async def dist_workers_and_inject_larva(self, townhall: Unit) -> Units:
         excess_worker = self.empty_workers.closer_than(10, townhall.position)
-        m = self.need_worker_mineral()
+        m = self.need_worker_mineral
         if townhall.assigned_harvesters > townhall.ideal_harvesters and excess_worker.exists and m is not None:
             self.actions.append(excess_worker.random.gather(m))
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
@@ -776,6 +781,7 @@ class MyBot(sc2.BotAI):
                 return
         self.actions.append(self.units(UnitTypeId.OVERLORD).idle.random(AbilityId.MORPH_OVERSEER))
 
+    @property_cache_once_per_frame
     def need_worker_mineral(self):
         t = self.townhalls.ready.filter(lambda a: a.assigned_harvesters < a.ideal_harvesters)
         if t.exists:
