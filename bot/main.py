@@ -78,14 +78,14 @@ class MyBot(sc2.BotAI):
         self.calc_enemy_info()
         self.iteration = iteration
 
-        self.forces = (self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units | self.base_trade_units) |
-                       self.units(UnitTypeId.BANELING) |
-                       self.units(UnitTypeId.HYDRALISK) |
-                       self.units(UnitTypeId.ROACH).tags_not_in(self.scout_units | self.base_trade_units) |
-                       self.units(UnitTypeId.MUTALISK) |
-                       self.units(UnitTypeId.OVERSEER) |
-                       self.units(UnitTypeId.INFESTOR) |
-                       self.units(UnitTypeId.INFESTORTERRAN))
+        self.forces = (self.units(UnitTypeId.ZERGLING).ready.tags_not_in(self.scout_units | self.base_trade_units) |
+                       self.units(UnitTypeId.BANELING).ready |
+                       self.units(UnitTypeId.HYDRALISK).ready |
+                       self.units(UnitTypeId.ROACH).ready.tags_not_in(self.scout_units | self.base_trade_units) |
+                       self.units(UnitTypeId.MUTALISK).ready |
+                       self.units(UnitTypeId.OVERSEER).ready |
+                       self.units(UnitTypeId.INFESTOR).ready |
+                       self.units(UnitTypeId.INFESTORTERRAN).ready)
 
         half_size = self.start_location.distance_to(self.game_info.map_center)
 
@@ -165,7 +165,8 @@ class MyBot(sc2.BotAI):
                 for unit in self.units(UnitTypeId.SWARMHOSTMP).ready:
                     abilities = (await self.get_available_abilities([unit]))[0]
                     if AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
-                        self.actions.append(unit(AbilityId.EFFECT_SPAWNLOCUSTS, self.enemy_near_townhall.first.position))
+                        self.actions.append(
+                            unit(AbilityId.EFFECT_SPAWNLOCUSTS, self.enemy_near_townhall.first.position))
         elif self.supply_used > 190 or \
                 self.surplus_forces > 20 or \
                 (self.surplus_forces > 0 and self.enemy_expansions.amount > self.townhalls.amount):
@@ -330,7 +331,6 @@ class MyBot(sc2.BotAI):
             else:
                 self.production_order.append(UnitTypeId.ZERGLING)
 
-
         # banelings
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
             b = self.count_enemy_unit(UnitTypeId.MARINE) * 0.75
@@ -423,7 +423,10 @@ class MyBot(sc2.BotAI):
         # drone
         for d in self.units(UnitTypeId.DRONE).idle:
             d: Unit = d
-            self.actions.append(d.gather(self.need_worker_mineral))
+            if self.need_worker_mineral:
+                self.actions.append(d.gather(self.need_worker_mineral))
+            else:
+                self.actions.append(d.gather(self.state.mineral_field.closest_to(d.position)))
 
         await self.build_building()
         await self.upgrade_building()
@@ -506,10 +509,17 @@ class MyBot(sc2.BotAI):
             if u.ground_range > 1:
                 self.actions.append(u.attack(b, queue=True))
             return
-        if u.ground_range < 1:
+        if u.type_id == UnitTypeId.BANELING:
             self.actions.append(u.attack(t))
             return
         enemy: Units = self.visible_enemy_units.closer_than(10, u.position)
+        if u.type_id == UnitTypeId.ZERGLING:
+            front_line: Units = self.forces.of_type({UnitTypeId.ROACH, UnitTypeId.HYDRALISK, UnitTypeId.BANELING})
+            if not enemy.exists and not u.is_moving and front_line.exists:
+                self.actions.append(u.move(backwards(front_line.closest_to(t).position, t, 5)))
+            else:
+                self.actions.append(u.attack(t))
+            return
         if enemy.exists and u.weapon_cooldown > 0:
             c = enemy.closest_to(u.position)
             self.actions.extend([
