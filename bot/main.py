@@ -333,12 +333,13 @@ class MyBot(sc2.BotAI):
 
         # banelings
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
-            b = (self.count_enemy_unit(UnitTypeId.MARINE) + self.count_enemy_unit(
-                UnitTypeId.ZEALOT) + self.count_enemy_unit(UnitTypeId.ADEPT)) / 2
+            b = self.count_enemy_unit(UnitTypeId.MARINE) * 0.75
             if self.count_unit(UnitTypeId.BANELING) < b:
-                z = self.units(UnitTypeId.ZERGLING).closer_than(half_size, self.start_location)
+                z = self.units(UnitTypeId.ZERGLING)
                 if z.exists:
-                    self.actions.append(z.first(AbilityId.MORPHZERGLINGTOBANELING_BANELING))
+                    t = z.closest_to(self.start_location)
+                    if not self.visible_enemy_units.closer_than(10, t.position).exists:
+                        self.actions.append(t(AbilityId.MORPHZERGLINGTOBANELING_BANELING))
 
         # lair upgrade
         if not self.units(UnitTypeId.LAIR).exists and \
