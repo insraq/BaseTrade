@@ -141,7 +141,7 @@ class MyBot(sc2.BotAI):
 
         # attacks
         if self.enemy_near_townhall.exists:
-            if self.forces.amount == 0 and self.enemy_near_townhall.amount > 2:
+            if not self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and self.enemy_near_townhall.amount > 2:
                 for w in self.workers:
                     self.actions.append(w.attack(self.enemy_start_locations[0]))
             for unit in self.forces:
