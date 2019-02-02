@@ -13,6 +13,7 @@ from sc2.units import Units
 
 HEALTH_PERCENT = 0.2
 
+
 class MyBot(sc2.BotAI):
     with open(Path(__file__).parent / "../botinfo.json") as f:
         NAME = json.load(f)["name"]
@@ -81,9 +82,11 @@ class MyBot(sc2.BotAI):
         self.iteration = iteration
 
         self.forces = (self.units(UnitTypeId.ZERGLING).ready.tags_not_in(self.scout_units | self.base_trade_units) |
+                       self.units(UnitTypeId.ZERGLING).ready.idle.tags_in(self.base_trade_units) |
                        self.units(UnitTypeId.BANELING).ready |
                        self.units(UnitTypeId.HYDRALISK).ready |
                        self.units(UnitTypeId.ROACH).ready.tags_not_in(self.scout_units | self.base_trade_units) |
+                       self.units(UnitTypeId.ROACH).ready.idle.tags_in(self.base_trade_units) |
                        self.units(UnitTypeId.MUTALISK).ready |
                        self.units(UnitTypeId.OVERSEER).ready |
                        self.units(UnitTypeId.INFESTOR).ready |
@@ -353,9 +356,8 @@ class MyBot(sc2.BotAI):
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
                 (self.count_unit(UnitTypeId.ROACH) > 0 and UnitTypeId.ROACHWARREN in self.build_order or
-                 self.townhalls.amount >= 3 and UnitTypeId.BANELINGNEST in self.build_order or
-                    self.enemy_air_forces_supply > 8
-                ) and \
+                 self.count_unit(UnitTypeId.BANELING) > 0 and UnitTypeId.BANELINGNEST in self.build_order or
+                 self.enemy_air_forces_supply > 8) and \
                 self.can_afford_or_change_production(UnitTypeId.LAIR):
             self.actions.append(self.hq.build(UnitTypeId.LAIR))
 
@@ -520,14 +522,16 @@ class MyBot(sc2.BotAI):
         if u.type_id == UnitTypeId.BANELING:
             self.actions.append(u.attack(t))
             return
-        enemy: Units = self.visible_enemy_units.closer_than(10, u.position)
         if u.type_id == UnitTypeId.ZERGLING:
             front_line: Units = self.forces.of_type({UnitTypeId.ROACH, UnitTypeId.HYDRALISK, UnitTypeId.BANELING})
-            if not enemy.exists and not u.is_moving and front_line.exists:
-                self.actions.append(u.move(backwards(front_line.closest_to(t).position, t, 5)))
+            if not self.visible_enemy_units.closer_than(6, u.position).exists and \
+                    front_line.exists and \
+                    front_line.closest_distance_to(t) > u.distance_to(t):
+                self.actions.append(u.move(self.rally_point))
             else:
                 self.actions.append(u.attack(t))
             return
+        enemy: Units = self.visible_enemy_units.closer_than(10, u.position)
         if enemy.exists and u.weapon_cooldown > 0:
             c = enemy.closest_to(u.position)
             self.actions.extend([
