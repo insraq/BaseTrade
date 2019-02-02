@@ -387,7 +387,7 @@ class MyBot(sc2.BotAI):
             exps = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locations.keys()))
             self.actions.extend([
                 o.move(self.enemy_start_locations[0].towards(self.game_info.map_center, 18)),
-                o.move(exps[1].towards(self.game_info.map_center, 10), queue=True),
+                o.move(exps[1].towards(self.game_info.map_center, 5), queue=True),
             ])
 
         # second overlord scout
