@@ -11,6 +11,7 @@ from sc2.position import Point2, Rect
 from sc2.unit import Unit, UnitOrder
 from sc2.units import Units
 
+HEALTH_PERCENT = 0.2
 
 class MyBot(sc2.BotAI):
     with open(Path(__file__).parent / "../botinfo.json") as f:
@@ -171,7 +172,7 @@ class MyBot(sc2.BotAI):
                 self.surplus_forces > 20 or \
                 (self.surplus_forces > 0 and self.enemy_expansions.amount > self.townhalls.amount):
             for unit in self.forces:
-                if unit.health_percentage < 0.1:
+                if unit.health_percentage < HEALTH_PERCENT:
                     self.actions.append(unit.move(self.rally_point))
                 elif unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
@@ -230,7 +231,7 @@ class MyBot(sc2.BotAI):
                             self.actions.append(w.attack(enemy_nearby.first))
                 continue
             elif x.is_structure:
-                if x.build_progress < 1 and x.health_percentage < 0.1:
+                if x.build_progress < 1 and x.health_percentage < HEALTH_PERCENT:
                     self.actions.append(x(AbilityId.CANCEL))
                 continue
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
@@ -242,7 +243,7 @@ class MyBot(sc2.BotAI):
             elif x.tag == self.first_overlord_tag:
                 self.actions.append(x.move(x.position.towards(self.game_info.map_center, 10)))
                 continue
-            elif x.health_percentage < 0.1:
+            elif x.health_percentage < HEALTH_PERCENT:
                 self.actions.append(x.move(self.rally_point))
                 continue
             if not x.is_idle:
@@ -386,7 +387,7 @@ class MyBot(sc2.BotAI):
             o: Units = self.units(UnitTypeId.OVERLORD).tags_not_in({self.first_overlord_tag})
             if o.exists:
                 self.second_overlord_tag = o.first.tag
-        elif o.first.is_idle and o.first.health_percentage >= 0.1:
+        elif o.first.is_idle and o.first.health_percentage >= HEALTH_PERCENT:
             self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 5), queue=True))
             self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 25), queue=True))
 
