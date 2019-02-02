@@ -122,6 +122,12 @@ class MyBot(sc2.BotAI):
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
+        elif is_protoss:
+            self.build_order = [
+                UnitTypeId.SPAWNINGPOOL,
+                UnitTypeId.HYDRALISKDEN,
+                UnitTypeId.EVOLUTIONCHAMBER,
+            ]
         else:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
@@ -185,6 +191,7 @@ class MyBot(sc2.BotAI):
                     self.actions.append(unit.move(self.rally_point))
                 elif unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
+                    self.actions.append(unit.move(self.attack_target, queue=True))
                 elif unit.type_id == UnitTypeId.OVERSEER:
                     self.actions.append(unit.move(self.forces.center))
                 else:
@@ -357,9 +364,7 @@ class MyBot(sc2.BotAI):
                 not self.units(UnitTypeId.HIVE).exists and \
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
-                (self.count_unit(UnitTypeId.ROACH) > 0 and UnitTypeId.ROACHWARREN in self.build_order or
-                 self.count_unit(UnitTypeId.BANELING) > 0 and UnitTypeId.BANELINGNEST in self.build_order or
-                 self.enemy_air_forces_supply > 8) and \
+                self.should_upgrade_lair() and \
                 self.can_afford_or_change_production(UnitTypeId.LAIR):
             self.actions.append(self.hq.build(UnitTypeId.LAIR))
 
@@ -513,6 +518,15 @@ class MyBot(sc2.BotAI):
                 return t
         return None
 
+    def should_upgrade_lair(self):
+        if self.enemy_air_forces_supply > 8:
+            return True
+        if UnitTypeId.ROACHWARREN in self.build_order:
+            return self.count_unit(UnitTypeId.ROACHWARREN) > 0
+        if UnitTypeId.BANELINGNEST in self.build_order:
+            return self.count_unit(UnitTypeId.BANELINGNEST) > 0
+        return self.workers.amount >= 16 * 2
+
     def move_and_attack(self, u: Unit, t: Point2):
         banelings: Units = self.visible_enemy_units.of_type({UnitTypeId.BANELING}).closer_than(4, u.position)
         if banelings.exists:
@@ -611,6 +625,8 @@ class MyBot(sc2.BotAI):
                     if b == UnitTypeId.ROACHWARREN and self.workers.amount < 16 * 2:
                         return
                     if b == UnitTypeId.BANELINGNEST and self.workers.amount < 16 * 2:
+                        return
+                    if b == UnitTypeId.HYDRALISKDEN and not self.units(UnitTypeId.LAIR).ready.exists:
                         return
                     await self.build(b, near=p)
                     return
@@ -859,7 +875,9 @@ class MyBot(sc2.BotAI):
             return False
         if not self.units(UnitTypeId.SPAWNINGPOOL).exists:
             return False
-        if not (self.units(UnitTypeId.ROACHWARREN).exists or self.units(UnitTypeId.BANELINGNEST).exists):
+        if not (self.units(UnitTypeId.ROACHWARREN).exists or
+                self.units(UnitTypeId.BANELINGNEST).exists or
+                self.units(UnitTypeId.LAIR).exists):
             return self.townhalls.amount <= 1
         full_workers = True
         total_ideal_harvesters = 0
@@ -990,16 +1008,8 @@ class MyBot(sc2.BotAI):
         for d in self.units(UnitTypeId.DRONE).idle:
             self.actions.append(d.gather(self.state.mineral_field.closest_to(d)))
 
-        base_trade_units = set()
-        for u in self.units.of_type({UnitTypeId.ROACH, UnitTypeId.ZERGLING}).tags_in(self.base_trade_units):
-            u: Unit = u
-            if not u.is_idle:
-                base_trade_units.add(u.tag)
-        self.base_trade_units = base_trade_units
-
         if self.forces.idle.amount > 40 and self.est_surplus_forces > 0:
             for f in self.forces.idle:
-                self.base_trade_units.add(f.tag)
                 self.actions.append(f.attack(self.attack_target))
 
         if self.forces.idle.amount > 20 and len(self.base_trade_units) == 0:
