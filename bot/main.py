@@ -293,6 +293,31 @@ class MyBot(sc2.BotAI):
             await self.do_actions(self.actions)
             return
 
+        # base trade
+        zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units)
+        if self.supply_used > 190:
+            self.base_trade_units.clear()
+        elif self.supply_used > 150 and \
+                self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < 12 and \
+                zs.exists:
+            z = zs.random
+            self.base_trade_units.add(z.tag)
+            if self.enemy_expansions.exists:
+                p = self.enemy_expansions[0].position.closest(self.far_corners)
+            else:
+                p = self.enemy_start_locations[0].closest(self.far_corners)
+            self.actions.extend([
+                z.move(p),
+                z.patrol(p.towards(self.game_info.map_center, 10), queue=True),
+            ])
+
+        if self.enemy_forces_distance < half_size or self.enemy_near_townhall.amount > 5:
+            for f in self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units):
+                if self.enemy_expansions.exists:
+                    self.actions.append(f.attack(self.enemy_expansions.closest_to(f).position))
+                else:
+                    self.actions.append(f.attack(self.enemy_start_locations[0]))
+
         # build spinecrawlers
         number_to_build = 2 if is_zerg else 1
         if self.count_unit(UnitTypeId.SPINECRAWLER) < number_to_build and \
@@ -522,7 +547,7 @@ class MyBot(sc2.BotAI):
         if self.enemy_air_forces_supply > 8:
             return True
         if UnitTypeId.ROACHWARREN in self.build_order:
-            return self.count_unit(UnitTypeId.ROACHWARREN) > 0
+            return self.count_unit(UnitTypeId.ROACH) >= 10
         if UnitTypeId.BANELINGNEST in self.build_order:
             return self.count_unit(UnitTypeId.BANELINGNEST) > 0
         return self.workers.amount >= 16 * 2
@@ -622,9 +647,9 @@ class MyBot(sc2.BotAI):
                 p = t.position.random_on_distance(10)
                 if (i == 0 or self.units(self.build_order[i - 1]).exists) and self.should_build(
                         b) and self.is_location_safe(p):
-                    if b == UnitTypeId.ROACHWARREN and self.workers.amount < 16 * 2:
+                    if b == UnitTypeId.ROACHWARREN and self.count_unit(UnitTypeId.DRONE) < 16 * 2:
                         return
-                    if b == UnitTypeId.BANELINGNEST and self.workers.amount < 16 * 2:
+                    if b == UnitTypeId.BANELINGNEST and self.count_unit(UnitTypeId.DRONE) < 16 * 2:
                         return
                     if b == UnitTypeId.HYDRALISKDEN and not self.units(UnitTypeId.LAIR).ready.exists:
                         return
@@ -680,7 +705,7 @@ class MyBot(sc2.BotAI):
             UnitTypeId.HIVE,
             UnitTypeId.ORBITALCOMMAND,
             UnitTypeId.PLANETARYFORTRESS
-        })
+        }).sorted_by_distance_to(self.start_location)
 
         for e in self.known_enemy_units:
             e: Unit = e
