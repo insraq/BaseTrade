@@ -139,9 +139,8 @@ class MyBot(sc2.BotAI):
             self.train(UnitTypeId.OVERLORD)
 
         # attacks
-        enemy_nearby = self.enemy_nearby()
-        if enemy_nearby:
-            if self.forces.amount == 0:
+        if self.enemy_near_townhall.exists:
+            if self.forces.amount == 0 and self.enemy_near_townhall.amount > 2:
                 for w in self.workers:
                     self.actions.append(w.attack(self.enemy_start_locations[0]))
             for unit in self.forces:
@@ -154,19 +153,19 @@ class MyBot(sc2.BotAI):
                 if not sc.exists or \
                         sc.closest_distance_to(self.rally_point) > 15 or \
                         sc.closest_distance_to(unit.position) > 15:
-                    self.move_and_attack(unit, enemy_nearby.position)
+                    self.move_and_attack(unit, self.enemy_near_townhall.first.position)
                     continue
 
                 if sc.filter(lambda u: u.is_ready and u.is_attacking).exists or \
                         self.units_attacked.of_type(UnitTypeId.SPINECRAWLER).exists:
-                    self.move_and_attack(unit, enemy_nearby.position)
+                    self.move_and_attack(unit, self.enemy_near_townhall.first.position)
                 else:
                     self.actions.append(unit.move(self.start_location))
             if 0 < self.enemy_forces_distance < half_size:
                 for unit in self.units(UnitTypeId.SWARMHOSTMP).ready:
                     abilities = (await self.get_available_abilities([unit]))[0]
                     if AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
-                        self.actions.append(unit(AbilityId.EFFECT_SPAWNLOCUSTS, enemy_nearby.position))
+                        self.actions.append(unit(AbilityId.EFFECT_SPAWNLOCUSTS, self.enemy_near_townhall.first.position))
         elif self.supply_used > 190 or self.surplus_forces > 20 or self.enemy_expansions.amount >= self.townhalls.amount:
             for unit in self.forces:
                 if unit.health_percentage < 0.1:
@@ -324,8 +323,11 @@ class MyBot(sc2.BotAI):
             if self.townhalls.ready.amount == 1 and self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(
                     UnitTypeId.XELNAGATOWER).amount:
                 self.production_order.insert(0, UnitTypeId.ZERGLING)
+            elif is_zerg and self.units(UnitTypeId.ROACHWARREN).ready.exists and self.minerals - self.vespene < 100:
+                pass
             else:
                 self.production_order.append(UnitTypeId.ZERGLING)
+
 
         # banelings
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
@@ -609,15 +611,15 @@ class MyBot(sc2.BotAI):
             return target.position
         return self.enemy_start_locations[0]
 
-    def enemy_nearby(self):
+    @property_cache_once_per_frame
+    def enemy_near_townhall(self) -> Units:
+        result = set()
         for t in self.townhalls:
-            t: Unit = t
-            e: Units = self.visible_enemy_units.closer_than(20, t.position)
-            if e.visible.amount > 0:
-                n = e.closest_to(t.position)
-                print("enemy nearby:", n)
-                return n
-        return None
+            enemy: Units = self.visible_enemy_units.closer_than(20, t.position)
+            for e in enemy:
+                e: Unit = e
+                result.add(e.tag)
+        return self.visible_enemy_units.tags_in(result).sorted_by_distance_to(self.start_location)
 
     @property_cache_once_per_frame
     def visible_enemy_units(self) -> Units:
