@@ -166,7 +166,9 @@ class MyBot(sc2.BotAI):
                     abilities = (await self.get_available_abilities([unit]))[0]
                     if AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
                         self.actions.append(unit(AbilityId.EFFECT_SPAWNLOCUSTS, self.enemy_near_townhall.first.position))
-        elif self.supply_used > 190 or self.surplus_forces > 20 or self.enemy_expansions.amount >= self.townhalls.amount:
+        elif self.supply_used > 190 or \
+                self.surplus_forces > 20 or \
+                (self.surplus_forces > 0 and self.enemy_expansions.amount > self.townhalls.amount):
             for unit in self.forces:
                 if unit.health_percentage < 0.1:
                     self.actions.append(unit.move(self.rally_point))
