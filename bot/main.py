@@ -34,6 +34,7 @@ class MyBot(sc2.BotAI):
         self.enemy_unit_history: Dict[UnitTypeId, Set[int]] = {}
         self.enemy_forces: Dict[int, Unit] = {}
         self.enemy_forces_supply: float = 0
+        self.enemy_air_forces_supply: float = 0
         self.enemy_forces_stat: Dict[UnitTypeId, int] = 0
         self.enemy_forces_distance: float = -1
         self.enemy_forces_approaching: bool = False
@@ -155,6 +156,10 @@ class MyBot(sc2.BotAI):
                         sc.closest_distance_to(self.rally_point) > 15 or \
                         sc.closest_distance_to(unit.position) > 15:
                     self.move_and_attack(unit, self.enemy_near_townhall.first.position)
+                    continue
+
+                if self.enemy_near_townhall.not_flying.amount <= 0 and not unit.can_attack_air:
+                    self.move_and_attack(unit, self.attack_target)
                     continue
 
                 if sc.filter(lambda u: u.is_ready and u.is_attacking).exists or \
@@ -348,7 +353,9 @@ class MyBot(sc2.BotAI):
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
                 (self.count_unit(UnitTypeId.ROACH) > 0 and UnitTypeId.ROACHWARREN in self.build_order or
-                 self.townhalls.amount >= 3 and UnitTypeId.BANELINGNEST in self.build_order) and \
+                 self.townhalls.amount >= 3 and UnitTypeId.BANELINGNEST in self.build_order or
+                    self.enemy_air_forces_supply > 8
+                ) and \
                 self.can_afford_or_change_production(UnitTypeId.LAIR):
             self.actions.append(self.hq.build(UnitTypeId.LAIR))
 
@@ -665,10 +672,13 @@ class MyBot(sc2.BotAI):
             self.enemy_unit_history[e.type_id].add(e.tag)
 
         self.enemy_forces_supply = 0
+        self.enemy_air_forces_supply = 0
         self.enemy_forces_stat = {}
         distance = 0
         for k, v in self.enemy_forces.items():
             self.enemy_forces_supply += v._type_data._proto.food_required
+            if v.is_flying:
+                self.enemy_air_forces_supply += v._type_data._proto.food_required
             if v.type_id in self.enemy_forces_stat:
                 self.enemy_forces_stat[v.type_id] += 1
             else:
