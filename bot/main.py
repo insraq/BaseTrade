@@ -252,7 +252,8 @@ class MyBot(sc2.BotAI):
                 self.actions.append(x.move(x.position.towards(self.game_info.map_center, 10)))
                 continue
             elif x.health_percentage < HEALTH_PERCENT:
-                self.actions.append(x.move(self.rally_point))
+                t = self.rally_point if x.distance_to(self.rally_point) > 5 else self.start_location
+                self.actions.append(x.move(t))
                 continue
             if not x.is_idle:
                 continue
