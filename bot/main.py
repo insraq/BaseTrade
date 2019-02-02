@@ -525,7 +525,7 @@ class MyBot(sc2.BotAI):
             return
         if u.type_id == UnitTypeId.ZERGLING:
             front_line: Units = self.forces.of_type({UnitTypeId.ROACH, UnitTypeId.HYDRALISK, UnitTypeId.BANELING})
-            if not self.known_enemy_units.closer_than(6, u.position).exists and \
+            if not self.known_enemy_units.closer_than(10, u.position).exists and \
                     front_line.exists and \
                     front_line.closest_distance_to(t) > u.distance_to(t):
                 self.actions.append(u.move(self.rally_point))
@@ -537,7 +537,7 @@ class MyBot(sc2.BotAI):
             c = enemy.closest_to(u.position)
             self.actions.extend([
                 u.move(backwards(u.position, c.position, u.movement_speed * u.weapon_cooldown)),
-                u.attack(c.position, queue=True)
+                u.attack(t, queue=True)
             ])
         else:
             self.actions.append(u.attack(t))
