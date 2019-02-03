@@ -88,7 +88,6 @@ class MyBot(sc2.BotAI):
                        self.units(UnitTypeId.HYDRALISK).ready |
                        self.units(UnitTypeId.ROACH).ready.tags_not_in(self.scout_units | self.base_trade_units) |
                        self.units(UnitTypeId.ROACH).ready.idle.tags_in(self.base_trade_units) |
-                       self.units(UnitTypeId.MUTALISK).ready |
                        self.units(UnitTypeId.OVERSEER).ready |
                        self.units(UnitTypeId.INFESTOR).ready |
                        self.units(UnitTypeId.INFESTORTERRAN).ready)
@@ -104,7 +103,7 @@ class MyBot(sc2.BotAI):
             return
         else:
             self.hq = self.townhalls.closest_to(self.start_location)
-            self.rally_point = self.townhalls.closest_to(self.game_info.map_center).position.towards(
+            self.rally_point: Point2 = self.townhalls.closest_to(self.game_info.map_center).position.towards(
                 self.game_info.map_center, 4)
 
         is_terran = self.enemy_race == Race.Terran or \
@@ -153,7 +152,7 @@ class MyBot(sc2.BotAI):
         # attacks
         if self.enemy_near_townhall.exists:
             if not self.units(UnitTypeId.SPAWNINGPOOL).ready.exists or \
-                    self.enemy_near_townhall.amount > min(self.forces.amount, 1):
+                    self.enemy_near_townhall.amount > max(self.forces.amount, 1):
                 for w in self.workers.closer_than(10, self.enemy_near_townhall.first.position):
                     if not w.is_attacking:
                         self.actions.append(w.attack(self.enemy_near_townhall.first.position))
@@ -178,7 +177,7 @@ class MyBot(sc2.BotAI):
                         self.units_attacked.of_type(UnitTypeId.SPINECRAWLER).exists:
                     self.move_and_attack(unit, self.enemy_near_townhall.first.position)
                 else:
-                    self.actions.append(unit.move(self.start_location))
+                    self.actions.append(unit.move(sc.first.position.towards(self.start_location, 7)))
             if 0 < self.enemy_forces_distance < half_size:
                 for unit in self.units(UnitTypeId.SWARMHOSTMP).ready:
                     abilities = (await self.get_available_abilities([unit]))[0]
@@ -207,7 +206,8 @@ class MyBot(sc2.BotAI):
                     self.actions.append(w.stop())
             for unit in self.forces.further_than(10, self.rally_point):
                 if unit.type_id == UnitTypeId.BANELING and \
-                        unit.is_attacking and self.visible_enemy_units.closer_than(5, unit).exists:
+                        unit.is_attacking and \
+                        self.visible_enemy_units.of_type({UnitTypeId.MARINE}).closer_than(10, unit).amount > 2:
                     continue
                 if unit.type_id == UnitTypeId.OVERSEER and has_order(unit, AbilityId.SPAWNCHANGELING_SPAWNCHANGELING):
                     continue
@@ -299,8 +299,7 @@ class MyBot(sc2.BotAI):
 
         # base trade
         zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units)
-        if 150 < self.supply_used < 190 and \
-                self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < 12 and \
+        if self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < 12 < zs.amount and \
                 zs.exists:
             z = zs.random
             self.base_trade_units.add(z.tag)
@@ -321,11 +320,21 @@ class MyBot(sc2.BotAI):
                     self.actions.append(f.attack(self.enemy_start_locations[0]))
 
         # build spinecrawlers
-        number_to_build = 2 if is_zerg else 1
-        if self.count_unit(UnitTypeId.SPINECRAWLER) < number_to_build and \
+        n = 2 if is_zerg else 1
+        if self.count_spinecrawler() < n and \
                 self.townhalls.ready.amount > 1 and \
                 self.can_afford_or_change_production(UnitTypeId.SPINECRAWLER):
             await self.build_spine_crawler()
+
+        for s in self.units(UnitTypeId.SPINECRAWLER).ready.idle:
+            if s.distance_to(self.rally_point) > 10 and self.has_creep(self.rally_point):
+                self.actions.append(s(AbilityId.SPINECRAWLERUPROOT_SPINECRAWLERUPROOT))
+
+        for s in self.units(UnitTypeId.SPINECRAWLERUPROOTED).ready.idle:
+            t = await self.find_placement(
+                UnitTypeId.SPINECRAWLER, self.rally_point.towards(self.game_info.map_center, 3), 4, False, 1)
+            if t is not None:
+                self.actions.append(s(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT, t, queue=True))
 
         # economy
         for t in self.townhalls.ready:
@@ -378,7 +387,7 @@ class MyBot(sc2.BotAI):
 
         # banelings
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
-            b = self.count_enemy_unit(UnitTypeId.MARINE) * 0.75
+            b = self.count_enemy_unit(UnitTypeId.MARINE) * 0.35
             if self.count_unit(UnitTypeId.BANELING) < b:
                 z = self.units(UnitTypeId.ZERGLING)
                 if z.exists:
@@ -495,9 +504,9 @@ class MyBot(sc2.BotAI):
         # make creep queen
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
                 UnitTypeId.QUEEN not in self.production_order and \
-                self.townhalls.amount >= 3 and \
-                self.can_afford_or_change_production(UnitTypeId.QUEEN) and \
-                self.count_unit(UnitTypeId.QUEEN) <= self.townhalls.ready.amount:
+                self.townhalls.amount >= 2 and \
+                self.count_unit(UnitTypeId.QUEEN) <= self.townhalls.ready.amount and \
+                self.can_afford_or_change_production(UnitTypeId.QUEEN):
             self.actions.append(self.townhalls.ready.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
         if creep_queen is not None and creep_queen.is_idle:
             abilities = await self.get_available_abilities(creep_queen)
@@ -570,7 +579,10 @@ class MyBot(sc2.BotAI):
                 self.actions.append(u.attack(b, queue=True))
             return
         if u.type_id == UnitTypeId.BANELING:
-            self.actions.append(u.attack(t))
+            if self.visible_enemy_units.of_type({UnitTypeId.MARINE}).closer_than(10, u.position).amount > 2:
+                self.actions.append(u.attack(t))
+            else:
+                self.actions.append(u.move(self.rally_point))
             return
         if u.type_id == UnitTypeId.ZERGLING:
             front_line: Units = self.forces.of_type({UnitTypeId.ROACH, UnitTypeId.HYDRALISK, UnitTypeId.BANELING})
@@ -931,6 +943,9 @@ class MyBot(sc2.BotAI):
         return not self.known_enemy_structures.of_type(
             {UnitTypeId.PHOTONCANNON, UnitTypeId.SPINECRAWLER, UnitTypeId.BUNKER}).closer_than(7, p).exists
 
+    def count_spinecrawler(self):
+        return self.count_unit(UnitTypeId.SPINECRAWLER) + self.count_unit(UnitTypeId.SPINECRAWLERUPROOTED)
+
     async def defend_early_rush(self) -> bool:
         half_size = self.start_location.distance_to(self.game_info.map_center)
         proxy_barracks = self.known_enemy_structures. \
@@ -943,7 +958,7 @@ class MyBot(sc2.BotAI):
         # build spinecrawlers
         if 1 < self.townhalls.ready.amount < 3 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
-                self.count_unit(UnitTypeId.SPINECRAWLER) < min(self.enemy_forces_supply / 3, 3):
+                self.count_spinecrawler() < min(self.enemy_forces_supply / 3, 3):
             await self.build_spine_crawler()
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or
@@ -959,7 +974,7 @@ class MyBot(sc2.BotAI):
                 abilities = await self.get_available_abilities(sp.first)
                 if AbilityId.RESEARCH_ZERGLINGMETABOLICBOOST in abilities:
                     self.actions.append(sp.first(AbilityId.RESEARCH_ZERGLINGMETABOLICBOOST))
-                elif self.count_unit(UnitTypeId.SPINECRAWLER) <= 2:
+                elif self.count_spinecrawler() <= 2:
                     await self.build_spine_crawler()
                 else:
                     self.train(UnitTypeId.ZERGLING)
