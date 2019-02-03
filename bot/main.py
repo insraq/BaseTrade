@@ -1,5 +1,6 @@
 import json
 import math
+import random
 from pathlib import Path
 from typing import List, Dict, Set, Union
 
@@ -192,7 +193,9 @@ class MyBot(sc2.BotAI):
                     self.actions.append(unit.move(self.rally_point))
                 elif unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
-                    self.actions.append(unit.move(self.attack_target))
+                    self.actions.append(unit.move(
+                        self.forces.closest_to(self.attack_target).position.towards(self.start_location, 5)
+                    ))
                 elif unit.type_id == UnitTypeId.OVERSEER:
                     self.actions.append(unit.move(self.forces.center))
                 else:
@@ -411,9 +414,13 @@ class MyBot(sc2.BotAI):
 
         # expansion
         if self.should_expand() and self.can_afford_or_change_production(UnitTypeId.HATCHERY):
-            exps = self.start_location.sort_by_distance(self.expansion_locations.keys())
+            if self.townhalls.ready.amount == 3 and random.random() > 0.5:
+                fc = self.start_location.sort_by_distance(self.far_corners)
+                exps = fc[0].sort_by_distance(self.expansion_locations.keys())
+            else:
+                exps = self.start_location.sort_by_distance(self.expansion_locations.keys())
             for p in exps:
-                if self.can_place(UnitTypeId.HATCHERY, p):
+                if await self.can_place(UnitTypeId.HATCHERY, p):
                     await self.expand_now(None, 2, p)
 
         # first overlord scout
