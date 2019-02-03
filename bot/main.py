@@ -82,15 +82,22 @@ class MyBot(sc2.BotAI):
         self.calc_enemy_info()
         self.iteration = iteration
 
-        self.forces = (self.units(UnitTypeId.ZERGLING).ready.tags_not_in(self.scout_units | self.base_trade_units) |
-                       self.units(UnitTypeId.ZERGLING).ready.idle.tags_in(self.base_trade_units) |
-                       self.units(UnitTypeId.BANELING).ready |
-                       self.units(UnitTypeId.HYDRALISK).ready |
-                       self.units(UnitTypeId.ROACH).ready.tags_not_in(self.scout_units | self.base_trade_units) |
-                       self.units(UnitTypeId.ROACH).ready.idle.tags_in(self.base_trade_units) |
-                       self.units(UnitTypeId.OVERSEER).ready |
-                       self.units(UnitTypeId.INFESTOR).ready |
-                       self.units(UnitTypeId.INFESTORTERRAN).ready)
+        attack_units = self.units.of_type({
+            UnitTypeId.ZERGLING,
+            UnitTypeId.BANELING,
+            UnitTypeId.HYDRALISK,
+            UnitTypeId.ROACH,
+            UnitTypeId.OVERSEER,
+            UnitTypeId.INFESTOR,
+            UnitTypeId.INFESTORTERRAN
+        })
+
+        for f in attack_units.tags_in(self.base_trade_units):
+            f: Unit = f
+            if f.is_idle:
+                self.base_trade_units.discard(f.tag)
+
+        self.forces = attack_units.tags_not_in(self.scout_units | self.base_trade_units)
 
         half_size = self.start_location.distance_to(self.game_info.map_center)
 
@@ -211,8 +218,6 @@ class MyBot(sc2.BotAI):
                 if w.is_attacking:
                     self.actions.append(w.stop())
             for unit in self.forces.further_than(10, self.rally_point):
-                if unit.is_moving:
-                    continue
                 if unit.type_id == UnitTypeId.BANELING and \
                         unit.is_attacking and \
                         self.visible_enemy_units.of_type({UnitTypeId.MARINE}).closer_than(10, unit).amount > 2:
@@ -439,8 +444,8 @@ class MyBot(sc2.BotAI):
                     await self.expand_now(None, 2, p)
                 else:
                     for f in self.forces:
+                        self.base_trade_units.add(f.tag)
                         self.actions.append(f.move(p))
-
 
         # first overlord scout
         if self.units(UnitTypeId.OVERLORD).amount == 1:
