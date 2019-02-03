@@ -103,9 +103,8 @@ class MyBot(sc2.BotAI):
             return
         else:
             self.hq = self.townhalls.closest_to(self.start_location)
-            if self.rally_point is None:
-                self.rally_point = self.townhalls.closest_to(
-                    self.game_info.map_center).position.towards(self.game_info.map_center, 4)
+            self.rally_point = self.townhalls.closest_to(self.game_info.map_center).position.towards(
+                self.game_info.map_center, 4)
 
         is_terran = self.enemy_race == Race.Terran or \
                     (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Terran)
@@ -412,9 +411,10 @@ class MyBot(sc2.BotAI):
 
         # expansion
         if self.should_expand() and self.can_afford_or_change_production(UnitTypeId.HATCHERY):
-            loc = await self.get_next_expansion()
-            self.rally_point = loc.towards(self.game_info.map_center, 4)
-            await self.expand_now(None, 2, loc)
+            exps = self.start_location.sort_by_distance(self.expansion_locations.keys())
+            for p in exps:
+                if self.can_place(UnitTypeId.HATCHERY, p):
+                    await self.expand_now(None, 2, p)
 
         # first overlord scout
         if self.units(UnitTypeId.OVERLORD).amount == 1:
@@ -905,7 +905,7 @@ class MyBot(sc2.BotAI):
             return False
         if not (self.units(UnitTypeId.ROACHWARREN).exists or
                 self.units(UnitTypeId.BANELINGNEST).exists or
-                self.units(UnitTypeId.LAIR).exists):
+                self.count_unit(UnitTypeId.LAIR) > 0):
             return self.townhalls.amount <= 1
         full_workers = True
         total_ideal_harvesters = 0
