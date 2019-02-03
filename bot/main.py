@@ -720,7 +720,7 @@ class MyBot(sc2.BotAI):
     @property_cache_once_per_frame
     def visible_enemy_units(self) -> Units:
         def alive_and_can_attack(u: Unit) -> bool:
-            return u.health > 0 and not u.is_structure and (u._type_data._proto.food_required > 0 or u.can_attack)
+            return u.health > 0 and not u.is_structure and (u._type_data._proto.food_required > 0)
 
         return self.known_enemy_units.filter(alive_and_can_attack)
 
@@ -964,9 +964,9 @@ class MyBot(sc2.BotAI):
             {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
         townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
         # build spinecrawlers
-        if 1 < self.townhalls.ready.amount < 3 and \
+        if self.townhalls.ready.amount > 1 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
-                self.count_spinecrawler() < min(self.enemy_forces_supply / 3, 3):
+                self.count_spinecrawler() < min(self.enemy_forces_supply / 3, self.townhalls.ready.amount + 1):
             await self.build_spine_crawler()
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or
@@ -982,8 +982,6 @@ class MyBot(sc2.BotAI):
                 abilities = await self.get_available_abilities(sp.first)
                 if AbilityId.RESEARCH_ZERGLINGMETABOLICBOOST in abilities:
                     self.actions.append(sp.first(AbilityId.RESEARCH_ZERGLINGMETABOLICBOOST))
-                elif self.count_spinecrawler() <= 2:
-                    await self.build_spine_crawler()
                 else:
                     self.train(UnitTypeId.ZERGLING)
 
