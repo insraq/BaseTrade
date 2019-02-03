@@ -151,10 +151,11 @@ class MyBot(sc2.BotAI):
 
         # attacks
         if self.enemy_near_townhall.exists:
-            if not self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
+            if not self.units(UnitTypeId.SPAWNINGPOOL).ready.exists or \
                     self.enemy_near_townhall.amount > min(self.forces.amount, 1):
                 for w in self.workers.closer_than(10, self.enemy_near_townhall.first.position):
-                    self.actions.append(w.attack(self.enemy_near_townhall.first.position))
+                    if not w.is_attacking:
+                        self.actions.append(w.attack(self.enemy_near_townhall.first.position))
             for unit in self.forces:
                 unit: Unit = unit
                 if unit.type_id == UnitTypeId.INFESTOR:
@@ -566,8 +567,7 @@ class MyBot(sc2.BotAI):
         if u.type_id == UnitTypeId.ZERGLING:
             front_line: Units = self.forces.of_type({UnitTypeId.ROACH, UnitTypeId.HYDRALISK, UnitTypeId.BANELING})
             if not self.known_enemy_units.closer_than(10, u.position).exists and \
-                    front_line.exists and \
-                    front_line.closest_distance_to(t) > u.distance_to(t):
+                    front_line.exists and front_line.closest_distance_to(t) > u.distance_to(t):
                 self.actions.append(u.move(self.rally_point))
             else:
                 self.actions.append(u.attack(t))
