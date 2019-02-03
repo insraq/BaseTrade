@@ -595,7 +595,7 @@ class MyBot(sc2.BotAI):
         if u.type_id == UnitTypeId.ZERGLING:
             front_line: Units = self.forces.of_type({UnitTypeId.ROACH, UnitTypeId.HYDRALISK, UnitTypeId.BANELING})
             if not self.known_enemy_units.closer_than(10, u.position).exists and \
-                    front_line.exists and front_line.closest_distance_to(t) > u.distance_to(t):
+                    front_line.exists and front_line.closest_distance_to(t) + 5 > u.distance_to(t):
                 self.actions.append(u.stop())
             else:
                 self.actions.append(u.attack(t))
@@ -832,7 +832,7 @@ class MyBot(sc2.BotAI):
         if self.supply_used > 190 and self.already_pending(UpgradeId.OVERLORDSPEED) == 1:
             scouts = self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units)
         else:
-            scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
+            scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units | self.base_trade_units)
         if not scouts.exists:
             scouts = self.units(UnitTypeId.OVERLORD)
         return scouts
