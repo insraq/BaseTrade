@@ -103,8 +103,15 @@ class MyBot(sc2.BotAI):
             return
         else:
             self.hq = self.townhalls.closest_to(self.start_location)
-            self.rally_point: Point2 = self.townhalls.closest_to(self.game_info.map_center).position.towards(
-                self.game_info.map_center, 4)
+            if "redshift" in self.game_info.map_name.lower():
+                exps = self.townhalls.sorted_by_distance_to(self.game_info.map_center)
+                if exps[0].position.x < 29:
+                    self.rally_point: Point2 = exps[1].position.towards(self.game_info.map_center, 4)
+                else:
+                    self.rally_point: Point2 = exps[0].position.towards(self.game_info.map_center, 4)
+            else:
+                self.rally_point: Point2 = self.townhalls.closest_to(
+                    self.game_info.map_center).position.towards(self.game_info.map_center, 4)
 
         is_terran = self.enemy_race == Race.Terran or \
                     (self.known_enemy_units.exists and self.known_enemy_units.first.race == Race.Terran)
@@ -300,7 +307,7 @@ class MyBot(sc2.BotAI):
         # base trade
         zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units)
         if self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < 12 < zs.amount and \
-                zs.exists:
+                self.already_pending_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED) == 1:
             z = zs.random
             self.base_trade_units.add(z.tag)
             if self.enemy_expansions.exists:
@@ -579,7 +586,8 @@ class MyBot(sc2.BotAI):
                 self.actions.append(u.attack(b, queue=True))
             return
         if u.type_id == UnitTypeId.BANELING:
-            if self.visible_enemy_units.of_type({UnitTypeId.MARINE}).closer_than(10, u.position).amount > 2:
+            ec: Units = self.visible_enemy_units.closer_than(10, u.position)
+            if not ec.exists or ec.of_type({UnitTypeId.MARINE}).amount > 2:
                 self.actions.append(u.attack(t))
             else:
                 self.actions.append(u.move(self.rally_point))
