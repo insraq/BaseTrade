@@ -206,12 +206,13 @@ class MyBot(sc2.BotAI):
                     self.actions.append(unit.move(self.forces.center))
                 else:
                     self.move_and_attack(unit, self.attack_target)
-
         else:
             for w in self.workers:
                 if w.is_attacking:
                     self.actions.append(w.stop())
             for unit in self.forces.further_than(10, self.rally_point):
+                if unit.is_moving:
+                    continue
                 if unit.type_id == UnitTypeId.BANELING and \
                         unit.is_attacking and \
                         self.visible_enemy_units.of_type({UnitTypeId.MARINE}).closer_than(10, unit).amount > 2:
@@ -436,6 +437,10 @@ class MyBot(sc2.BotAI):
             for p in exps:
                 if await self.can_place(UnitTypeId.HATCHERY, p):
                     await self.expand_now(None, 2, p)
+                else:
+                    for f in self.forces:
+                        self.actions.append(f.move(p))
+
 
         # first overlord scout
         if self.units(UnitTypeId.OVERLORD).amount == 1:
