@@ -299,9 +299,7 @@ class MyBot(sc2.BotAI):
 
         # base trade
         zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units)
-        if self.supply_used > 190:
-            self.base_trade_units.clear()
-        elif self.supply_used > 150 and \
+        if 150 < self.supply_used < 190 and \
                 self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < 12 and \
                 zs.exists:
             z = zs.random
@@ -315,7 +313,7 @@ class MyBot(sc2.BotAI):
                 z.patrol(p.towards(self.game_info.map_center, 10), queue=True),
             ])
 
-        if self.enemy_forces_distance < half_size or self.enemy_near_townhall.amount > 5:
+        if self.enemy_forces_distance < half_size or self.enemy_near_townhall.amount > 5 or self.supply_used > 190:
             for f in self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units):
                 if self.enemy_expansions.exists:
                     self.actions.append(f.attack(self.enemy_expansions.closest_to(f).position))
