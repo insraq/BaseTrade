@@ -720,7 +720,7 @@ class MyBot(sc2.BotAI):
     @property_cache_once_per_frame
     def visible_enemy_units(self) -> Units:
         def alive_and_can_attack(u: Unit) -> bool:
-            return u.health > 0 and not u.is_structure and u._type_data._proto.food_required > 0
+            return u.health > 0 and not u.is_structure and (u._type_data._proto.food_required > 0 or u.can_attack)
 
         return self.known_enemy_units.filter(alive_and_can_attack)
 
