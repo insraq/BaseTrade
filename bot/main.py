@@ -306,7 +306,7 @@ class MyBot(sc2.BotAI):
 
         # base trade
         zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units)
-        if self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < 12 < zs.amount and \
+        if self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < zs.amount and \
                 self.already_pending_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED) == 1:
             z = zs.random
             self.base_trade_units.add(z.tag)

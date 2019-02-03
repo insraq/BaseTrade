@@ -18,7 +18,7 @@ def main():
         Bot(race, MyBot()),
         # Bot(Race.Zerg, WorkerRushBot()),
         Computer(Race.Random, Difficulty.VeryHard),
-    ], realtime=False, step_time_limit={"time_limit": 2, "window_size": 10, "penalty": 10}, game_time_limit=(60 * 30),
+    ], realtime=False, step_time_limit={"time_limit": 5, "window_size": 10, "penalty": 10}, game_time_limit=(60 * 30),
              save_replay_as="test.SC2Replay")
 
 
