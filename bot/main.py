@@ -596,7 +596,7 @@ class MyBot(sc2.BotAI):
             front_line: Units = self.forces.of_type({UnitTypeId.ROACH, UnitTypeId.HYDRALISK, UnitTypeId.BANELING})
             if not self.known_enemy_units.closer_than(10, u.position).exists and \
                     front_line.exists and front_line.closest_distance_to(t) > u.distance_to(t):
-                self.actions.append(u.move(self.rally_point))
+                self.actions.append(u.stop())
             else:
                 self.actions.append(u.attack(t))
             return
