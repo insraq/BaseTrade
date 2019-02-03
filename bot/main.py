@@ -192,7 +192,7 @@ class MyBot(sc2.BotAI):
                     self.actions.append(unit.move(self.rally_point))
                 elif unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
-                    self.actions.append(unit.move(self.attack_target, queue=True))
+                    self.actions.append(unit.move(self.attack_target))
                 elif unit.type_id == UnitTypeId.OVERSEER:
                     self.actions.append(unit.move(self.forces.center))
                 else:
