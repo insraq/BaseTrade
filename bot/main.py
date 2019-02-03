@@ -218,10 +218,6 @@ class MyBot(sc2.BotAI):
                 if w.is_attacking:
                     self.actions.append(w.stop())
             for unit in self.forces.further_than(10, self.rally_point):
-                if unit.type_id == UnitTypeId.BANELING and \
-                        unit.is_attacking and \
-                        self.visible_enemy_units.of_type({UnitTypeId.MARINE}).closer_than(10, unit).amount > 2:
-                    continue
                 if unit.type_id == UnitTypeId.OVERSEER and has_order(unit, AbilityId.SPAWNCHANGELING_SPAWNCHANGELING):
                     continue
                 self.actions.append(unit.move(self.rally_point))
