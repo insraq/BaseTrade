@@ -592,7 +592,7 @@ class MyBot(sc2.BotAI):
             return
         if u.type_id == UnitTypeId.BANELING:
             ec: Units = self.visible_enemy_units.closer_than(10, u.position)
-            if not ec.exists or ec.of_type({UnitTypeId.MARINE}).amount > 2:
+            if not ec.exists or ec.of_type({UnitTypeId.MARINE}).amount > 2 or u.distance_to(self.rally_point) < 10:
                 self.actions.append(u.attack(t))
             else:
                 self.actions.append(u.move(self.rally_point))
