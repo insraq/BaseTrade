@@ -28,7 +28,6 @@ class MyBot(sc2.BotAI):
         self.time_table = {}
         self.units_health: Dict[int, Union[int, float]] = {}
         self.units_attacked: Units = None
-        self.units_attacked_tags: List[Set[int]] = []
         self.creep_queen_tag = 0
         self.far_corners: Set[Point2] = set()
         self.hq: Unit = None
@@ -99,7 +98,7 @@ class MyBot(sc2.BotAI):
 
         self.forces = attack_units.tags_not_in(self.scout_units | self.base_trade_units)
 
-        half_size = self.start_location.distance_to(self.enemy_start_locations[0]) / 2
+        half_size = self.start_location.distance_to(self.game_info.map_center)
 
         # if i don't even have a townhall
         # this has to be there because sometimes `self.townhalls` returns nothing even though there're clearly townhalls
@@ -243,11 +242,11 @@ class MyBot(sc2.BotAI):
         # attack reactions
         for x in self.units_attacked:
             x: Unit = x
+            skip_health_check = False
             workers_nearby = self.workers.closer_than(5, x.position).filter(lambda wk: not wk.is_attacking)
-            enemy_nearby = self.visible_enemy_units.closer_than(5, x.position)
-            if not enemy_nearby.exists:
-                continue
+            enemy_nearby = self.visible_enemy_units.closer_than(10, x.position)
             if x.type_id == UnitTypeId.DRONE:
+                skip_health_check = True
                 another_townhall = self.townhalls.further_than(25, x.position)
                 if self.forces.amount > enemy_nearby.amount and \
                         another_townhall.exists and self.townhalls.ready.amount > 3:
@@ -259,7 +258,8 @@ class MyBot(sc2.BotAI):
                         if not w.is_attacking:
                             self.actions.append(w.attack(enemy_nearby.first))
             elif x.is_structure:
-                if x.build_progress < 1 and x.health_percentage < HEALTH_PERCENT:
+                skip_health_check = True
+                if x.build_progress < 1 and x.health_percentage < min(x.build_progress, HEALTH_PERCENT):
                     self.actions.append(x(AbilityId.CANCEL))
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
                 self.actions.append(x.move(self.rally_point))
@@ -270,13 +270,13 @@ class MyBot(sc2.BotAI):
             elif x.tag == self.first_overlord_tag:
                 self.actions.append(x.move(x.position.towards(self.game_info.map_center, 10)))
 
-            if x.health_percentage < HEALTH_PERCENT:
+            if x.health_percentage < HEALTH_PERCENT and not skip_health_check:
                 t = self.rally_point if x.distance_to(self.rally_point) > 10 else self.start_location
-                self.actions.append(x.move(t))
+                self.actions.append(x.move(t, queue=True))
+            elif not x.is_idle:
                 continue
-            if not x.is_idle:
-                continue
-            self.actions.append(x.move(self.rally_point))
+            else:
+                self.actions.append(x.move(self.rally_point))
 
         overseers = self.units(UnitTypeId.OVERSEER)
         if overseers.exists:
@@ -782,14 +782,7 @@ class MyBot(sc2.BotAI):
                 units_attacked.add(w.tag)
             self.units_health[w.tag] = w.health
 
-        if len(self.units_attacked_tags) >= 5:
-            self.units_attacked_tags.pop(0)
-        self.units_attacked_tags.append(units_attacked)
-
-        tags_union: Set[int] = set()
-        for s in self.units_attacked_tags:
-            tags_union = tags_union | s
-        self.units_attacked = self.units.tags_in(tags_union)
+        self.units_attacked = self.units.tags_in(units_attacked)
         print("surplus", self.surplus_forces, "est_surplus:", self.est_surplus_forces,
               "dist:", self.enemy_forces_distance, "approaching:", self.enemy_forces_approaching)
 
