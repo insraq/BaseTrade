@@ -323,8 +323,7 @@ class MyBot(sc2.BotAI):
                     self.actions.append(f.attack(self.enemy_start_locations[0]))
 
         # build spinecrawlers
-        n = 2 if is_zerg else 1
-        if self.count_spinecrawler() < n and \
+        if self.count_spinecrawler() < 1 and \
                 self.townhalls.ready.amount > 1 and \
                 self.can_afford_or_change_production(UnitTypeId.SPINECRAWLER):
             await self.build_spine_crawler()
@@ -488,13 +487,7 @@ class MyBot(sc2.BotAI):
             self.actions.append(self.hq.research(UpgradeId.OVERLORDSPEED))
 
         # drone
-        for d in self.units(UnitTypeId.DRONE).idle:
-            d: Unit = d
-            if self.need_worker_mineral is not None:
-                self.actions.append(d.gather(self.need_worker_mineral))
-            else:
-                self.actions.append(
-                    d.gather(self.state.mineral_field.closest_to(self.townhalls.closest_to(d.position))))
+        self.drone_gather()
 
         await self.build_building()
         await self.upgrade_building()
@@ -535,6 +528,15 @@ class MyBot(sc2.BotAI):
                     t = self.calc_creep_tumor_position(u)
                     if t is not None:
                         self.actions.append(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
+
+    def drone_gather(self):
+        for d in self.units(UnitTypeId.DRONE).idle:
+            d: Unit = d
+            if self.need_worker_mineral is not None:
+                self.actions.append(d.gather(self.need_worker_mineral))
+            else:
+                self.actions.append(
+                    d.gather(self.state.mineral_field.closest_to(self.townhalls.closest_to(d.position))))
 
     async def dist_workers_and_inject_larva(self, townhall: Unit) -> Units:
         excess_worker = self.empty_workers.closer_than(10, townhall.position)
@@ -958,9 +960,11 @@ class MyBot(sc2.BotAI):
             {UnitTypeId.DRONE, UnitTypeId.SCV, UnitTypeId.PROBE}).closer_than(half_size, self.start_location)
         townhall_to_defend = self.townhalls.ready.furthest_to(self.start_location)
         # build spinecrawlers
+        t = max(self.enemy_forces_supply / 3,
+                self.known_enemy_structures.of_type({UnitTypeId.WARPGATE, UnitTypeId.BARRACKS}).amount)
         if self.townhalls.ready.amount > 1 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
-                self.count_spinecrawler() < min(self.enemy_forces_supply / 3, self.townhalls.ready.amount + 1):
+                self.count_spinecrawler() < min(t, self.townhalls.ready.amount + 1):
             await self.build_spine_crawler()
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or
@@ -1002,8 +1006,7 @@ class MyBot(sc2.BotAI):
                 for w in self.empty_workers.closer_than(2.5, a):
                     self.actions.append(w.gather(self.state.mineral_field.closest_to(w)))
 
-        for d in self.units(UnitTypeId.DRONE).idle:
-            self.actions.append(d.gather(self.state.mineral_field.closest_to(d)))
+        self.drone_gather()
 
         if self.forces.idle.amount > 20 and len(self.base_trade_units) == 0:
             for f in self.forces.idle.random_group_of(10):
