@@ -111,7 +111,7 @@ class MyBot(sc2.BotAI):
             self.hq = self.townhalls.closest_to(self.start_location)
             if "redshift" in self.game_info.map_name.lower():
                 exps = self.townhalls.sorted_by_distance_to(self.game_info.map_center)
-                if exps[0].position.x < 29:
+                if exps[0].position.x < 29 and exps.amount > 1:
                     self.rally_point: Point2 = exps[1].position.towards(self.game_info.map_center, 4)
                 else:
                     self.rally_point: Point2 = exps[0].position.towards(self.game_info.map_center, 4)
