@@ -99,7 +99,7 @@ class MyBot(sc2.BotAI):
 
         self.forces = attack_units.tags_not_in(self.scout_units | self.base_trade_units)
 
-        half_size = self.start_location.distance_to(self.game_info.map_center)
+        half_size = self.start_location.distance_to(self.enemy_start_locations[0]) / 2
 
         # if i don't even have a townhall
         # this has to be there because sometimes `self.townhalls` returns nothing even though there're clearly townhalls
@@ -249,7 +249,8 @@ class MyBot(sc2.BotAI):
                 continue
             if x.type_id == UnitTypeId.DRONE:
                 another_townhall = self.townhalls.further_than(25, x.position)
-                if self.forces.amount > enemy_nearby.amount and another_townhall.exists and self.townhalls.ready.amount > 3:
+                if self.forces.amount > enemy_nearby.amount and \
+                        another_townhall.exists and self.townhalls.ready.amount > 3:
                     self.actions.append(x.move(another_townhall.first.position))
                 elif workers_nearby.amount > 2:
                     self.actions.append(x.attack(enemy_nearby.first))
@@ -257,31 +258,25 @@ class MyBot(sc2.BotAI):
                         w: Unit = w
                         if not w.is_attacking:
                             self.actions.append(w.attack(enemy_nearby.first))
-                continue
             elif x.is_structure:
                 if x.build_progress < 1 and x.health_percentage < HEALTH_PERCENT:
                     self.actions.append(x(AbilityId.CANCEL))
-                continue
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
                 self.actions.append(x.move(self.rally_point))
-                continue
             elif x.type_id == UnitTypeId.INFESTOR:
                 self.infestor_cast(x)
-                continue
+            elif x.type_id == UnitTypeId.OVERSEER:
+                self.actions.append(x(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING))
             elif x.tag == self.first_overlord_tag:
                 self.actions.append(x.move(x.position.towards(self.game_info.map_center, 10)))
-                continue
-            elif x.health_percentage < HEALTH_PERCENT:
+
+            if x.health_percentage < HEALTH_PERCENT:
                 t = self.rally_point if x.distance_to(self.rally_point) > 10 else self.start_location
                 self.actions.append(x.move(t))
                 continue
             if not x.is_idle:
                 continue
-            if self.forces.closer_than(10, x.position).amount > self.visible_enemy_units.closer_than(10,
-                                                                                                     x.position).amount:
-                self.actions.append(x.attack(enemy_nearby.first, queue=True))
-            else:
-                self.actions.append(x.move(self.rally_point))
+            self.actions.append(x.move(self.rally_point))
 
         overseers = self.units(UnitTypeId.OVERSEER)
         if overseers.exists:
@@ -307,7 +302,8 @@ class MyBot(sc2.BotAI):
 
         # base trade
         zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units)
-        if self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < zs.amount and \
+        if self.est_surplus_forces > 0 and \
+                self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < zs.amount and \
                 self.already_pending_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED) == 1:
             z = zs.random
             self.base_trade_units.add(z.tag)
@@ -437,10 +433,10 @@ class MyBot(sc2.BotAI):
             for p in exps:
                 if await self.can_place(UnitTypeId.HATCHERY, p):
                     await self.expand_now(None, 2, p)
-                else:
-                    for f in self.forces:
-                        self.base_trade_units.add(f.tag)
-                        self.actions.append(f.move(p))
+                    return
+                for f in self.forces:
+                    self.base_trade_units.add(f.tag)
+                    self.actions.append(f.move(p))
 
         # first overlord scout
         if self.units(UnitTypeId.OVERLORD).amount == 1:
@@ -495,7 +491,11 @@ class MyBot(sc2.BotAI):
         # drone
         for d in self.units(UnitTypeId.DRONE).idle:
             d: Unit = d
-            self.actions.append(d.gather(self.need_worker_mineral))
+            if self.need_worker_mineral is not None:
+                self.actions.append(d.gather(self.need_worker_mineral))
+            else:
+                self.actions.append(
+                    d.gather(self.state.mineral_field.closest_to(self.townhalls.closest_to(d.position))))
 
         await self.build_building()
         await self.upgrade_building()
@@ -890,7 +890,7 @@ class MyBot(sc2.BotAI):
         if t.exists:
             return self.state.mineral_field.closest_to(t.random.position)
         else:
-            return self.state.mineral_field.closest_to(self.townhalls.ready.random.position)
+            return None
 
     def should_build_extractor(self):
         if self.vespene - self.minerals > 100:
@@ -1063,10 +1063,6 @@ class MyBot(sc2.BotAI):
 
         for d in self.units(UnitTypeId.DRONE).idle:
             self.actions.append(d.gather(self.state.mineral_field.closest_to(d)))
-
-        if self.forces.idle.amount > 40 and self.est_surplus_forces > 0:
-            for f in self.forces.idle:
-                self.actions.append(f.attack(self.attack_target))
 
         if self.forces.idle.amount > 20 and len(self.base_trade_units) == 0:
             for f in self.forces.idle.random_group_of(10):
