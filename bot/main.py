@@ -157,9 +157,9 @@ class MyBot(sc2.BotAI):
         elif self.units(UnitTypeId.OVERLORD).amount <= 4:
             build_overlord = est_supply_left < 3
         else:
-            build_overlord = est_supply_left < 8
+            build_overlord = est_supply_left < 9
 
-        if build_overlord and est_supply_cap <= 200:
+        if build_overlord and est_supply_cap < 200:
             self.train(UnitTypeId.OVERLORD)
 
         # attacks
