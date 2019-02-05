@@ -12,7 +12,7 @@ from sc2.position import Point2, Rect
 from sc2.unit import Unit, UnitOrder
 from sc2.units import Units
 
-HEALTH_PERCENT = 0.2
+HEALTH_PERCENT = 0.1
 
 
 class MyBot(sc2.BotAI):
@@ -201,9 +201,7 @@ class MyBot(sc2.BotAI):
                 self.surplus_forces > 20 or \
                 (self.surplus_forces > 0 and self.enemy_expansions.amount > self.townhalls.amount):
             for unit in self.forces:
-                if unit.health_percentage < HEALTH_PERCENT:
-                    self.actions.append(unit.move(self.rally_point))
-                elif unit.type_id == UnitTypeId.INFESTOR:
+                if unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
                     self.actions.append(unit.move(
                         self.forces.closest_to(self.attack_target).position.towards(self.start_location, 5)
@@ -243,11 +241,9 @@ class MyBot(sc2.BotAI):
         # attack reactions
         for x in self.units_attacked:
             x: Unit = x
-            skip_health_check = False
             workers_nearby = self.workers.closer_than(5, x.position).filter(lambda wk: not wk.is_attacking)
             enemy_nearby = self.visible_enemy_units.closer_than(10, x.position)
             if x.type_id == UnitTypeId.DRONE:
-                skip_health_check = True
                 another_townhall = self.townhalls.further_than(25, x.position)
                 if self.forces.amount > enemy_nearby.amount and \
                         another_townhall.exists and self.townhalls.ready.amount > 3:
@@ -259,7 +255,6 @@ class MyBot(sc2.BotAI):
                         if not w.is_attacking:
                             self.actions.append(w.attack(enemy_nearby.first))
             elif x.is_structure:
-                skip_health_check = True
                 if x.build_progress < 1 and x.health_percentage < min(x.build_progress, HEALTH_PERCENT):
                     self.actions.append(x(AbilityId.CANCEL))
             elif x.type_id == UnitTypeId.SWARMHOSTMP:
@@ -270,14 +265,6 @@ class MyBot(sc2.BotAI):
                 self.actions.append(x(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING))
             elif x.tag == self.first_overlord_tag:
                 self.actions.append(x.move(x.position.towards(self.game_info.map_center, 10)))
-
-            if x.health_percentage < HEALTH_PERCENT and not skip_health_check:
-                t = self.rally_point if x.distance_to(self.rally_point) > 10 else self.start_location
-                self.actions.append(x.move(t, queue=True))
-            elif not x.is_idle:
-                continue
-            else:
-                self.actions.append(x.move(self.rally_point))
 
         overseers = self.units(UnitTypeId.OVERSEER)
         if overseers.exists:
@@ -300,8 +287,8 @@ class MyBot(sc2.BotAI):
 
         # base trade
         zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units | self.scout_units)
-        if self.est_surplus_forces >= 0 and \
-                self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < zs.amount and \
+        if self.est_surplus_forces >= 0 and zs.exists and \
+                self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < self.forces.amount and \
                 self.already_pending_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED) == 1:
             z = zs.random
             self.base_trade_units.add(z.tag)
@@ -316,10 +303,8 @@ class MyBot(sc2.BotAI):
 
         if self.enemy_forces_distance < half_size or self.enemy_near_townhall.amount > 5 or self.supply_used > 190:
             for f in self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units):
-                # if self.enemy_expansions.exists:
-                #     self.actions.append(f.attack(self.enemy_expansions.closest_to(f).position))
-                # else:
-                self.actions.append(f.attack(self.enemy_start_locations[0]))
+                if f.is_patrolling:
+                    self.actions.append(f.attack(self.enemy_start_locations[0]))
 
         # build spinecrawlers
         if self.count_spinecrawler() < 1 and \
