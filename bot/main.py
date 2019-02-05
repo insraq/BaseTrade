@@ -495,10 +495,7 @@ class MyBot(sc2.BotAI):
         # drone
         for d in self.units(UnitTypeId.DRONE).idle:
             d: Unit = d
-            if self.need_worker_mineral:
-                self.actions.append(d.gather(self.need_worker_mineral))
-            else:
-                self.actions.append(d.gather(self.state.mineral_field.closest_to(d.position)))
+            self.actions.append(d.gather(self.need_worker_mineral))
 
         await self.build_building()
         await self.upgrade_building()
@@ -893,7 +890,7 @@ class MyBot(sc2.BotAI):
         if t.exists:
             return self.state.mineral_field.closest_to(t.random.position)
         else:
-            return None
+            return self.state.mineral_field.closest_to(self.townhalls.ready.random.position)
 
     def should_build_extractor(self):
         if self.vespene - self.minerals > 100:
