@@ -382,7 +382,7 @@ class MyBot(sc2.BotAI):
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
             if self.townhalls.ready.amount == 1 and self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(
                     UnitTypeId.XELNAGATOWER).amount:
-                self.production_order.insert(0, UnitTypeId.ZERGLING)
+                self.production_order = [UnitTypeId.ZERGLING]
             elif is_zerg and self.units(UnitTypeId.ROACHWARREN).ready.exists and self.minerals - self.vespene < 100:
                 pass
             else:
