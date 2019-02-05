@@ -165,8 +165,7 @@ class MyBot(sc2.BotAI):
 
         # attacks
         if self.enemy_near_townhall.exists:
-            if not self.units(UnitTypeId.SPAWNINGPOOL).ready.exists or \
-                    self.enemy_near_townhall.amount > max(self.forces.amount, 1):
+            if self.enemy_near_townhall.amount > max(self.forces.amount, 1):
                 for w in self.workers.closer_than(10, self.enemy_near_townhall.first.position):
                     if not w.is_attacking:
                         self.actions.append(w.attack(self.enemy_near_townhall.first.position))
@@ -398,7 +397,7 @@ class MyBot(sc2.BotAI):
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
             b = self.count_enemy_unit(UnitTypeId.MARINE) * 0.35
             if self.count_unit(UnitTypeId.BANELING) < b:
-                z = self.units(UnitTypeId.ZERGLING)
+                z = self.forces.of_type({UnitTypeId.ZERGLING})
                 if z.exists:
                     t = z.closest_to(self.start_location)
                     if not self.visible_enemy_units.closer_than(10, t.position).exists:
