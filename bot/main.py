@@ -164,7 +164,8 @@ class MyBot(sc2.BotAI):
 
         # attacks
         if self.enemy_near_townhall.exists:
-            if self.enemy_near_townhall.amount > max(self.forces.amount, 1):
+            if self.enemy_near_townhall.amount > max(self.forces.amount, 1) or \
+                    self.known_enemy_structures.closer_than(20, self.start_location).exists:
                 for w in self.workers.closer_than(10, self.enemy_near_townhall.first.position):
                     if not w.is_attacking:
                         self.actions.append(w.attack(self.enemy_near_townhall.first.position))
@@ -294,9 +295,6 @@ class MyBot(sc2.BotAI):
 
         # counter timing attack
         if await self.defend_early_rush():
-            await self.do_actions(self.actions)
-            return
-        if await self.defend_cannon_rush():
             await self.do_actions(self.actions)
             return
 
@@ -991,57 +989,6 @@ class MyBot(sc2.BotAI):
 
             return True
 
-        return False
-
-    async def defend_cannon_rush(self):
-        half_size = self.start_location.distance_to(self.game_info.map_center)
-        cannons = self.known_enemy_structures.of_type({
-            UnitTypeId.PYLON,
-            UnitTypeId.PHOTONCANNON
-        }).closer_than(20, self.start_location)
-        if cannons.exists:
-            # production queue
-            if self.units(UnitTypeId.ROACHWARREN).ready.exists:
-                self.train(UnitTypeId.ROACH)
-
-            sp = self.units(UnitTypeId.SPAWNINGPOOL).ready
-            if sp.exists:
-                abilities = await self.get_available_abilities(sp.first)
-                if AbilityId.RESEARCH_ZERGLINGMETABOLICBOOST in abilities:
-                    self.actions.append(sp.first(AbilityId.RESEARCH_ZERGLINGMETABOLICBOOST))
-                if self.units(UnitTypeId.SPINECRAWLER).closer_than(7, self.start_location).amount <= 1:
-                    await self.build(
-                        UnitTypeId.SPINECRAWLER,
-                        self.state.mineral_field.closest_to(self.start_location).position,
-                        random_alternative=False
-                    )
-                if self.units(UnitTypeId.SPINECRAWLER).closer_than(3, sp.first.position).amount <= 0:
-                    p: Point2 = sp.first.position.random_on_distance(3)
-                    if self.is_location_safe(p):
-                        await self.build(
-                            UnitTypeId.SPINECRAWLER,
-                            sp.first.position,
-                            random_alternative=False
-                        )
-
-                self.train(UnitTypeId.ZERGLING)
-
-            if self.should_build(UnitTypeId.SPAWNINGPOOL):
-                p: Point2 = self.townhalls.furthest_to(self.start_location).position.random_on_distance(3)
-                if self.is_location_safe(p):
-                    await self.build(
-                        UnitTypeId.SPAWNINGPOOL,
-                        sp.first.position,
-                        random_alternative=False
-                    )
-
-            self.early_attack()
-
-            for t in self.townhalls.ready:
-                t: Unit = t
-                await self.dist_workers_and_inject_larva(t)
-
-            return True
         return False
 
     def early_attack(self):
