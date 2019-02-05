@@ -178,8 +178,7 @@ class MyBot(sc2.BotAI):
                 # fight within spinecrawler
                 sc = self.units(UnitTypeId.SPINECRAWLER)
                 if not sc.exists or \
-                        sc.closest_distance_to(self.rally_point) > 15 or \
-                        sc.closest_distance_to(unit.position) > 15:
+                        sc.closest_distance_to(self.enemy_near_townhall.first) > 15:
                     self.move_and_attack(unit, self.enemy_near_townhall.first.position)
                     continue
 
