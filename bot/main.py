@@ -164,7 +164,7 @@ class MyBot(sc2.BotAI):
 
         # attacks
         if self.enemy_near_townhall.exists:
-            if self.enemy_near_townhall.amount > self.forces.amount:
+            if self.enemy_near_townhall.amount > self.forces.amount + self.count_spinecrawler():
                 ws = self.workers.closer_than(20, self.enemy_near_townhall.first.position)
                 n = min(ws.amount, round(self.enemy_near_townhall.amount * 1.5))
                 for w in ws.random_group_of(n):
@@ -317,10 +317,10 @@ class MyBot(sc2.BotAI):
 
         if self.enemy_forces_distance < half_size or self.enemy_near_townhall.amount > 5 or self.supply_used > 190:
             for f in self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units):
-                if self.enemy_expansions.exists:
-                    self.actions.append(f.attack(self.enemy_expansions.closest_to(f).position))
-                else:
-                    self.actions.append(f.attack(self.enemy_start_locations[0]))
+                # if self.enemy_expansions.exists:
+                #     self.actions.append(f.attack(self.enemy_expansions.closest_to(f).position))
+                # else:
+                self.actions.append(f.attack(self.enemy_start_locations[0]))
 
         # build spinecrawlers
         if self.count_spinecrawler() < 1 and \
