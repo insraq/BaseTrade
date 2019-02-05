@@ -165,8 +165,9 @@ class MyBot(sc2.BotAI):
         # attacks
         if self.enemy_near_townhall.exists:
             if self.enemy_near_townhall.amount > self.forces.amount:
-                n = min(self.workers.amount, round(self.enemy_near_townhall.amount * 1.5))
-                for w in self.workers.closer_than(20, self.enemy_near_townhall.first.position).random_group_of(n):
+                ws = self.workers.closer_than(20, self.enemy_near_townhall.first.position)
+                n = min(ws.amount, round(self.enemy_near_townhall.amount * 1.5))
+                for w in ws.random_group_of(n):
                     if not w.is_attacking:
                         self.actions.append(w.attack(self.enemy_near_townhall.first.position))
             for unit in self.forces:
