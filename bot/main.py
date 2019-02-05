@@ -167,9 +167,9 @@ class MyBot(sc2.BotAI):
             if self.enemy_near_townhall.amount > self.forces.amount + self.count_spinecrawler():
                 ws = self.workers.closer_than(20, self.enemy_near_townhall.first.position)
                 n = min(ws.amount, round(self.enemy_near_townhall.amount * 1.5))
-                for w in ws.random_group_of(n):
-                    if not w.is_attacking:
-                        self.actions.append(w.attack(self.enemy_near_townhall.first.position))
+                if ws.filter(lambda w: w.is_attacking).amount < n:
+                    self.actions.append(
+                        ws.filter(lambda w: not w.is_attacking).random.attack(self.enemy_near_townhall.first.position))
             for unit in self.forces:
                 unit: Unit = unit
                 if unit.type_id == UnitTypeId.INFESTOR:
