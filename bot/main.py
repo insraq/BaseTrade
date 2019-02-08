@@ -308,10 +308,11 @@ class MyBot(sc2.BotAI):
                     self.actions.append(f.attack(self.enemy_start_locations[0]))
         else:
             for f in self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units):
-                self.actions.extend([
-                    f.move(p),
-                    f.patrol(p.towards(self.game_info.map_center, 10), queue=True),
-                ])
+                if f.is_attacking:
+                    self.actions.extend([
+                        f.move(p),
+                        f.patrol(p.towards(self.game_info.map_center, 10), queue=True),
+                    ])
 
         # build spinecrawlers
         if self.count_spinecrawler() < 1 and \
@@ -396,6 +397,7 @@ class MyBot(sc2.BotAI):
         if not self.units(UnitTypeId.HIVE).exists and \
                 self.already_pending(UnitTypeId.HIVE, all_units=True) == 0 and \
                 self.units(UnitTypeId.INFESTATIONPIT).ready.exists and \
+                self.supply_used > 190 and \
                 self.can_afford_or_change_production(UnitTypeId.HIVE):
             self.actions.append(self.hq.build(UnitTypeId.HIVE))
 
@@ -594,7 +596,7 @@ class MyBot(sc2.BotAI):
             else:
                 self.actions.append(u.attack(t))
             return
-        enemy: Units = self.visible_enemy_units.closer_than(10, u.position)
+        enemy: Units = self.visible_enemy_units.filter(lambda e: e.target_in_range(u))
         if enemy.exists and u.weapon_cooldown > 0:
             c = enemy.closest_to(u.position)
             self.actions.extend([
@@ -663,7 +665,7 @@ class MyBot(sc2.BotAI):
                     self.actions.append(u.first(abilities[0]))
 
     async def build_building(self):
-        if self.townhalls.amount < 2:
+        if self.supply_used < 14:
             return
         for i, b in enumerate(self.build_order):
             for t in self.townhalls.sorted_by_distance_to(self.start_location):
