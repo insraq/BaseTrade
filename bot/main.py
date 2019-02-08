@@ -152,7 +152,8 @@ class MyBot(sc2.BotAI):
         # supply_cap does not include overload that is being built
         est_supply_cap = (self.count_unit(UnitTypeId.OVERLORD)) * 8 + self.townhalls.ready.amount * 6
         est_supply_left = est_supply_cap - self.supply_used
-        if self.units(UnitTypeId.OVERLORD).amount == 1 and self.townhalls.amount < 2:
+        if self.units(UnitTypeId.OVERLORD).amount == 1 and \
+                (self.townhalls.amount < 2 or not self.units(UnitTypeId.SPAWNINGPOOL).exists):
             build_overlord = False
         elif self.units(UnitTypeId.OVERLORD).amount <= 4:
             build_overlord = est_supply_left < 3
@@ -377,11 +378,7 @@ class MyBot(sc2.BotAI):
         if self.units(UnitTypeId.BANELINGNEST).ready.exists and self.units(UnitTypeId.ZERGLING).exists:
             b = self.count_enemy_unit(UnitTypeId.MARINE) * 0.35
             if self.count_unit(UnitTypeId.BANELING) < b:
-                z = self.forces.of_type({UnitTypeId.ZERGLING})
-                if z.exists:
-                    t = z.closest_to(self.start_location)
-                    if not self.visible_enemy_units.closer_than(10, t.position).exists:
-                        self.actions.append(t(AbilityId.MORPHZERGLINGTOBANELING_BANELING))
+                self.production_order.append(UnitTypeId.BANELING)
 
         # lair upgrade
         if not self.units(UnitTypeId.LAIR).exists and \
@@ -471,6 +468,11 @@ class MyBot(sc2.BotAI):
                 self.already_pending_upgrade(UpgradeId.OVERLORDSPEED) == 0 and \
                 self.can_afford_or_change_production(UpgradeId.OVERLORDSPEED):
             self.actions.append(self.hq.research(UpgradeId.OVERLORDSPEED))
+
+        # burrow
+        # if self.supply_used > 100 and self.already_pending_upgrade(UpgradeId.BURROW) == 0 and \
+        #         self.can_afford_or_change_production(UpgradeId.BURROW):
+        #     self.actions.append(self.hq.research(UpgradeId.BURROW))
 
         # drone
         self.drone_gather()
@@ -658,6 +660,8 @@ class MyBot(sc2.BotAI):
                     self.actions.append(u.first(abilities[0]))
 
     async def build_building(self):
+        if self.townhalls.amount < 2:
+            return
         for i, b in enumerate(self.build_order):
             for t in self.townhalls.sorted_by_distance_to(self.start_location):
                 t: Unit = t
@@ -777,7 +781,14 @@ class MyBot(sc2.BotAI):
         if self.supply_left == 0:
             return
         for u in self.production_order:
-            self.train(u)
+            if u == UnitTypeId.BANELING:
+                z = self.forces.of_type({UnitTypeId.ZERGLING})
+                if z.exists:
+                    t = z.closest_to(self.start_location)
+                    if not self.visible_enemy_units.closer_than(10, t.position).exists:
+                        self.actions.append(t(AbilityId.MORPHZERGLINGTOBANELING_BANELING))
+            else:
+                self.train(u)
 
     def train(self, u):
         lv = self.units(UnitTypeId.LARVA)
@@ -906,10 +917,8 @@ class MyBot(sc2.BotAI):
     def should_expand(self):
         if self.already_pending(UnitTypeId.HATCHERY) > 0:
             return False
-        if self.townhalls.amount == 1 and self.supply_used < 14:
-            return False
-        if not self.units(UnitTypeId.SPAWNINGPOOL).exists:
-            return False
+        if self.townhalls.amount == 1 and self.supply_used == 14:
+            return True
         if not (self.units(UnitTypeId.ROACHWARREN).exists or
                 self.units(UnitTypeId.BANELINGNEST).exists or
                 self.count_unit(UnitTypeId.LAIR) > 0):
