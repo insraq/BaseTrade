@@ -44,6 +44,7 @@ class MyBot(sc2.BotAI):
         self.second_overlord_tag = 0
         self.iteration = 0
         self.reached_full_supply = False
+        self.expand_target: Point2 = None
 
         # enemy stats
         self.enemy_expansions: Units = None
@@ -213,10 +214,11 @@ class MyBot(sc2.BotAI):
             for w in self.workers:
                 if w.is_attacking:
                     self.actions.append(w.stop())
-            for unit in self.forces.further_than(10, self.rally_point):
+            t = self.expand_target if self.expand_target is not None else self.rally_point
+            for unit in self.forces.further_than(10, t):
                 if unit.type_id == UnitTypeId.OVERSEER and has_order(unit, AbilityId.SPAWNCHANGELING_SPAWNCHANGELING):
                     continue
-                self.actions.append(unit.move(self.rally_point))
+                self.actions.append(unit.move(t))
         swarmhost = self.units(UnitTypeId.SWARMHOSTMP).ready
         sa = []
         if swarmhost.amount >= 5:
@@ -347,7 +349,7 @@ class MyBot(sc2.BotAI):
             UnitTypeId.EXTRACTOR).amount * 3
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.est_defense_surplus > 0 or self.townhalls.amount < 2):
+                (self.est_defense_surplus > 0 or self.supply_used < 14):
             for i in range(round(self.minerals / 50)):
                 self.production_order.append(UnitTypeId.DRONE)
 
@@ -418,11 +420,9 @@ class MyBot(sc2.BotAI):
                 exps = self.start_location.sort_by_distance(self.expansion_locations.keys())
             for p in exps:
                 if await self.can_place(UnitTypeId.HATCHERY, p):
+                    self.expand_target = p
                     await self.expand_now(None, 2, p)
                     return
-                for f in self.forces:
-                    self.base_trade_units.add(f.tag)
-                    self.actions.append(f.move(p))
 
         # first overlord scout
         if self.units(UnitTypeId.OVERLORD).amount == 1:
@@ -665,7 +665,7 @@ class MyBot(sc2.BotAI):
                     self.actions.append(u.first(abilities[0]))
 
     async def build_building(self):
-        if self.supply_used < 14:
+        if self.townhalls.amount < 2 or self.supply_used < 14:
             return
         for i, b in enumerate(self.build_order):
             for t in self.townhalls.sorted_by_distance_to(self.start_location):
@@ -723,6 +723,11 @@ class MyBot(sc2.BotAI):
         return self.known_enemy_units.filter(alive_and_can_attack)
 
     def calc_enemy_info(self):
+
+        if self.expand_target is not None:
+            if self.townhalls.closer_than(10, self.expand_target).exists:
+                self.expand_target = None
+
         self.enemy_expansions = self.known_enemy_structures.of_type({
             UnitTypeId.COMMANDCENTER,
             UnitTypeId.NEXUS,
