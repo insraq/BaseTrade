@@ -198,9 +198,7 @@ class MyBot(sc2.BotAI):
                     if AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
                         self.actions.append(
                             unit(AbilityId.EFFECT_SPAWNLOCUSTS, self.enemy_near_townhall.first.position))
-        elif self.supply_used > 190 or \
-                self.surplus_forces > 20 or \
-                (self.surplus_forces > 0 and self.enemy_expansions.amount > self.townhalls.amount):
+        elif self.supply_used > 190 or self.surplus_forces > len(self.base_trade_units) * 0.5:
             for unit in self.forces:
                 if unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
@@ -289,16 +287,16 @@ class MyBot(sc2.BotAI):
             return
 
         # base trade
+        if self.enemy_expansions.exists:
+            p = self.enemy_expansions[0].position.closest(self.far_corners)
+        else:
+            p = self.enemy_start_locations[0].closest(self.far_corners)
         zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units | self.scout_units)
-        if self.est_surplus_forces >= 0 and zs.exists and \
+        if self.est_defense_surplus >= 0 and zs.exists and \
                 self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < self.forces.amount and \
                 self.already_pending_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED) == 1:
             z = zs.random
             self.base_trade_units.add(z.tag)
-            if self.enemy_expansions.exists:
-                p = self.enemy_expansions[0].position.closest(self.far_corners)
-            else:
-                p = self.enemy_start_locations[0].closest(self.far_corners)
             self.actions.extend([
                 z.move(p),
                 z.patrol(p.towards(self.game_info.map_center, 10), queue=True),
@@ -308,6 +306,12 @@ class MyBot(sc2.BotAI):
             for f in self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units):
                 if f.is_patrolling:
                     self.actions.append(f.attack(self.enemy_start_locations[0]))
+        else:
+            for f in self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units):
+                self.actions.extend([
+                    f.move(p),
+                    f.patrol(p.towards(self.game_info.map_center, 10), queue=True),
+                ])
 
         # build spinecrawlers
         if self.count_spinecrawler() < 1 and \
@@ -342,15 +346,14 @@ class MyBot(sc2.BotAI):
             UnitTypeId.EXTRACTOR).amount * 3
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.est_surplus_forces > 0 or self.townhalls.amount < 2 or (
-                        not self.enemy_forces_approaching and self.est_surplus_forces > -self.supply_used / 10)):
+                (self.est_defense_surplus > 0 or self.townhalls.amount < 2):
             for i in range(round(self.minerals / 50)):
                 self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
         # infestor
-        if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.INFESTOR) < 3:
-            self.production_order.append(UnitTypeId.INFESTOR)
+        # if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.INFESTOR) < 3:
+        #     self.production_order.append(UnitTypeId.INFESTOR)
 
         if self.units(UnitTypeId.HYDRALISKDEN).ready.exists and self.can_afford(UnitTypeId.HYDRALISK):
             self.production_order.extend([UnitTypeId.HYDRALISK])
@@ -362,7 +365,7 @@ class MyBot(sc2.BotAI):
             if self.supply_used > 150:
                 self.production_order = [UnitTypeId.SWARMHOSTMP]
             else:
-                self.production_order.append(UnitTypeId.SWARMHOSTMP)
+                self.production_order.insert(0, UnitTypeId.SWARMHOSTMP)
 
         # zerglings
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
@@ -677,7 +680,7 @@ class MyBot(sc2.BotAI):
                     await self.build(b, near=p)
                     return
         if self.should_build(UnitTypeId.INFESTATIONPIT) and \
-                self.count_unit(UnitTypeId.HYDRALISK) >= 10 and \
+                self.townhalls.amount >= 4 and \
                 self.units(UnitTypeId.LAIR).ready.exists and \
                 self.can_afford_or_change_production(UnitTypeId.INFESTATIONPIT):
             await self.build(UnitTypeId.INFESTATIONPIT, near=self.hq.position.random_on_distance(10))
@@ -941,6 +944,10 @@ class MyBot(sc2.BotAI):
     def is_location_safe(self, p: Point2):
         return not self.known_enemy_structures.of_type(
             {UnitTypeId.PHOTONCANNON, UnitTypeId.SPINECRAWLER, UnitTypeId.BUNKER}).closer_than(7, p).exists
+
+    @property_cache_once_per_frame
+    def est_defense_surplus(self):
+        return self.est_surplus_forces + self.count_spinecrawler() * 2
 
     def count_spinecrawler(self):
         return self.count_unit(UnitTypeId.SPINECRAWLER) + self.count_unit(UnitTypeId.SPINECRAWLERUPROOTED)
