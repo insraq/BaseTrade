@@ -243,6 +243,8 @@ class MyBot(sc2.BotAI):
             x: Unit = x
             workers_nearby = self.workers.closer_than(5, x.position).filter(lambda wk: not wk.is_attacking)
             enemy_nearby = self.visible_enemy_units.closer_than(10, x.position)
+            if not enemy_nearby.exists:
+                continue
             if x.type_id == UnitTypeId.DRONE:
                 another_townhall = self.townhalls.further_than(25, x.position)
                 if self.forces.amount > enemy_nearby.amount and \
