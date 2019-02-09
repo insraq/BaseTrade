@@ -177,17 +177,15 @@ class MyBot(sc2.BotAI):
                 if unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
                     continue
+                if self.enemy_near_townhall.not_flying.amount <= 0 and not unit.can_attack_air:
+                    self.move_and_attack(unit, self.attack_target)
+                    continue
                 # fight within spinecrawler
                 sc = self.units(UnitTypeId.SPINECRAWLER)
                 if not sc.exists or \
                         sc.closest_distance_to(self.enemy_near_townhall.first) > 15:
                     self.move_and_attack(unit, self.enemy_near_townhall.first.position)
                     continue
-
-                if self.enemy_near_townhall.not_flying.amount <= 0 and not unit.can_attack_air:
-                    self.move_and_attack(unit, self.attack_target)
-                    continue
-
                 if sc.filter(lambda u: u.is_ready and u.is_attacking).exists or \
                         self.units_attacked.of_type(UnitTypeId.SPINECRAWLER).exists:
                     self.move_and_attack(unit, self.enemy_near_townhall.first.position)
@@ -227,10 +225,13 @@ class MyBot(sc2.BotAI):
                 abilities = (await self.get_available_abilities([s]))[0]
                 if self.enemy_expansions.exists and AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
                     e: Units = self.visible_enemy_units.closer_than(10, s.position)
-                    if e.amount > 5:
+                    es: Units = self.known_enemy_structures.closer_than(20, s.position)
+                    if count_supply(e) > 5:
                         self.actions.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, e.random.position))
                         self.actions.append(s.move(self.rally_point, queue=True))
-                        continue
+                    elif es.exists:
+                        self.actions.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, es.random.position))
+                        self.actions.append(s.move(self.rally_point, queue=True))
                     else:
                         closest_exp = self.enemy_expansions.closest_to(s.position)
                         sa.append(s.move(closest_exp.position.towards(self.start_location, 20)))
@@ -359,7 +360,7 @@ class MyBot(sc2.BotAI):
         #     self.production_order.append(UnitTypeId.INFESTOR)
 
         if self.units(UnitTypeId.HYDRALISKDEN).ready.exists and self.can_afford(UnitTypeId.HYDRALISK):
-            self.production_order.extend([UnitTypeId.HYDRALISK])
+            self.production_order.append(UnitTypeId.HYDRALISK)
         elif self.units(UnitTypeId.ROACHWARREN).ready.exists:
             self.production_order.append(UnitTypeId.ROACH)
 
@@ -376,6 +377,8 @@ class MyBot(sc2.BotAI):
                     UnitTypeId.XELNAGATOWER).amount:
                 self.production_order = [UnitTypeId.ZERGLING]
             elif is_zerg and self.units(UnitTypeId.ROACHWARREN).ready.exists and self.minerals - self.vespene < 100:
+                pass
+            elif self.units(UnitTypeId.HYDRALISKDEN).ready.exists and self.minerals - self.vespene < 100:
                 pass
             else:
                 self.production_order.append(UnitTypeId.ZERGLING)
@@ -932,7 +935,7 @@ class MyBot(sc2.BotAI):
         if not (self.units(UnitTypeId.ROACHWARREN).exists or
                 self.units(UnitTypeId.BANELINGNEST).exists or
                 self.count_unit(UnitTypeId.LAIR) > 0):
-            return self.townhalls.amount <= 1
+            return self.townhalls.amount <= 2
         full_workers = True
         total_ideal_harvesters = 0
         for t in self.townhalls.ready:
@@ -1042,3 +1045,9 @@ def has_order(u: Unit, ability_id: AbilityId):
         if o.ability == ability_id:
             return True
     return False
+
+def count_supply(units: Units) -> float:
+    count = 0
+    for u in units:
+        count += u._type_data._proto.food_required
+    return count
