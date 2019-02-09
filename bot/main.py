@@ -534,9 +534,9 @@ class MyBot(sc2.BotAI):
         if creep_queen is not None and creep_queen.is_idle:
             abilities = await self.get_available_abilities(creep_queen)
             if AbilityId.BUILD_CREEPTUMOR_QUEEN in abilities:
-                t = self.townhalls.ready.furthest_to(self.start_location).position.random_on_distance(6)
+                t = self.townhalls.ready.furthest_to(self.start_location).position.random_on_distance(10)
                 if creep_tumors.exists:
-                    ct = creep_tumors.furthest_to(self.start_location).position.random_on_distance(6)
+                    ct = creep_tumors.furthest_to(self.start_location).position.random_on_distance(10)
                     if ct.distance2_to(self.start_location) > t.distance2_to(self.start_location):
                         t = ct
                 if self.has_creep(t) and self.can_place_creep_tumor(t):
