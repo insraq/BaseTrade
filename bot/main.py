@@ -346,10 +346,12 @@ class MyBot(sc2.BotAI):
                              max_distance=4,
                              placement_step=1)
 
-        for s in self.units(UnitTypeId.SPORECRAWLER).ready.idle:
+        for s in self.units(UnitTypeId.SPORECRAWLER):
             if s.tag not in self.air_defense and s.distance_to(self.rally_point) <= 8:
                 self.air_defense.add(s.tag)
-            if s.tag in self.air_defense and s.distance_to(self.rally_point) > 10 and self.has_creep(self.rally_point):
+            if s.is_idle and s.is_ready and \
+                    s.tag in self.air_defense and s.distance_to(self.rally_point) > 10 and \
+                    self.has_creep(self.rally_point):
                 self.actions.append(s(AbilityId.SPORECRAWLERUPROOT_SPORECRAWLERUPROOT))
 
         for s in self.units(UnitTypeId.SPORECRAWLERUPROOTED).ready.idle:
