@@ -47,6 +47,7 @@ class MyBot(sc2.BotAI):
         self.iteration = 0
         self.reached_full_supply = False
         self.expand_target: Point2 = None
+        self.air_defense = set()
 
         # enemy stats
         self.enemy_expansions: Units = None
@@ -225,7 +226,7 @@ class MyBot(sc2.BotAI):
             e: Units = self.known_enemy_units.closer_than(15, s.position)
             abilities = (await self.get_available_abilities([s]))[0]
             if AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
-                if count_supply(e) > 5 or e.structure.exists:
+                if count_supply(e.not_flying) > 5 or e.structure.exists:
                     self.actions.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, e.random.position))
                 else:
                     if self.enemy_expansions.exists:
@@ -336,6 +337,22 @@ class MyBot(sc2.BotAI):
             if t is not None:
                 self.actions.append(s(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT, t, queue=True))
 
+        if len(self.air_defense) < self.enemy_air_forces_supply / 4 and self.townhalls.ready.amount >= 3:
+            await self.build(UnitTypeId.SPORECRAWLER,
+                             self.rally_point.towards(self.game_info.map_center, 2),
+                             max_distance=4,
+                             placement_step=1)
+
+        for s in self.units(UnitTypeId.SPORECRAWLER).ready.idle:
+            if s.distance_to(self.rally_point) > 10 and self.has_creep(self.rally_point):
+                self.actions.append(s(AbilityId.SPORECRAWLERUPROOT_SPORECRAWLERUPROOT))
+
+        for s in self.units(UnitTypeId.SPORECRAWLERUPROOTED).ready.idle:
+            t = await self.find_placement(
+                UnitTypeId.SPONECRAWLER, self.rally_point.towards(self.game_info.map_center, 3), 4, False, 1)
+            if t is not None:
+                self.actions.append(s(AbilityId.SPONECRAWLERROOT_SPONECRAWLERROOT, t, queue=True))
+
         # economy
         for t in self.townhalls.ready:
             t: Unit = t
@@ -346,7 +363,7 @@ class MyBot(sc2.BotAI):
                 if not self.units(UnitTypeId.SPORECRAWLER).closer_than(10, t.position).exists and \
                         self.already_pending(UnitTypeId.SPORECRAWLER) == 0:
                     await self.build(UnitTypeId.SPORECRAWLER,
-                                     near=t.position.towards(self.state.mineral_field.closest_to(t).position, 3),
+                                     near=backwards(t.position, self.game_info.map_center, 3),
                                      random_alternative=False)
 
         need_workers = self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
@@ -572,7 +589,7 @@ class MyBot(sc2.BotAI):
         return None
 
     def should_upgrade_lair(self):
-        if self.enemy_air_forces_supply > 8:
+        if self.enemy_air_forces_supply >= 8:
             return True
         if UnitTypeId.ROACHWARREN in self.build_order:
             return self.count_unit(UnitTypeId.ROACH) > 0
