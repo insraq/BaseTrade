@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 import random
 from pathlib import Path
@@ -11,6 +12,8 @@ from sc2.constants import *
 from sc2.position import Point2, Rect
 from sc2.unit import Unit, UnitOrder
 from sc2.units import Units
+
+logger = logging.getLogger(__name__)
 
 HEALTH_PERCENT = 0.1
 
@@ -38,7 +41,6 @@ class MyBot(sc2.BotAI):
         self.enemy_air_forces_supply: float = 0
         self.enemy_forces_stat: Dict[UnitTypeId, int] = 0
         self.enemy_forces_distance: float = -1
-        self.enemy_forces_approaching: bool = False
         self.enemy_has_changed = False
         self.first_overlord_tag = 0
         self.second_overlord_tag = 0
@@ -239,7 +241,6 @@ class MyBot(sc2.BotAI):
                 else:
                     self.actions.append(s.stop())
 
-
         # attack reactions
         for x in self.units_attacked:
             x: Unit = x
@@ -352,7 +353,7 @@ class MyBot(sc2.BotAI):
             UnitTypeId.EXTRACTOR).amount * 3
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.est_defense_surplus > 0 or self.supply_used < 14):
+                (self.est_defense_surplus >= 0 or self.supply_used < 14):
             for i in range(round(self.minerals / 50)):
                 self.production_order.append(UnitTypeId.DRONE)
 
@@ -706,7 +707,6 @@ class MyBot(sc2.BotAI):
     def attack_target(self):
         if self.known_enemy_structures.exists:
             target = self.known_enemy_structures.furthest_to(self.enemy_start_locations[0])
-            print("attack target:", target)
             return target.position
         return self.enemy_start_locations[0]
 
@@ -769,12 +769,7 @@ class MyBot(sc2.BotAI):
             if self.enemy_has_changed:
                 distance += v.distance_to(self.start_location)
         if distance > 0 and len(self.enemy_forces) > 0:
-            avg = distance / len(self.enemy_forces)
-            if avg < self.enemy_forces_distance:
-                self.enemy_forces_approaching = True
-            if avg > self.enemy_forces_distance:
-                self.enemy_forces_approaching = False
-            self.enemy_forces_distance = avg
+            self.enemy_forces_distance = distance / len(self.enemy_forces)
 
         self.enemy_has_changed = False
 
@@ -789,8 +784,12 @@ class MyBot(sc2.BotAI):
             self.units_health[w.tag] = w.health
 
         self.units_attacked = self.units.tags_in(units_attacked)
-        print("surplus", self.surplus_forces, "est_surplus:", self.est_surplus_forces,
-              "dist:", self.enemy_forces_distance, "approaching:", self.enemy_forces_approaching)
+        logger.info(
+            "surplus={} est_surplus={} dist={}",
+            self.surplus_forces,
+            self.est_surplus_forces,
+            self.enemy_forces_distance
+        )
 
     async def produce_unit(self):
         if self.supply_left == 0:
@@ -961,7 +960,7 @@ class MyBot(sc2.BotAI):
 
     @property_cache_once_per_frame
     def est_defense_surplus(self):
-        return self.est_surplus_forces > 0 or self.surplus_forces + self.count_spinecrawler() * 2 > 0
+        return max(self.est_surplus_forces, self.surplus_forces + self.count_spinecrawler() * 2)
 
     def count_spinecrawler(self):
         return self.count_unit(UnitTypeId.SPINECRAWLER) + self.count_unit(UnitTypeId.SPINECRAWLERUPROOTED)
