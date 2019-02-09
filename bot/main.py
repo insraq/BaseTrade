@@ -887,7 +887,9 @@ class MyBot(sc2.BotAI):
             o: Unit = o
             if o.health_percentage > 0.5:
                 return
-        self.actions.append(self.units(UnitTypeId.OVERLORD).idle.random(AbilityId.MORPH_OVERSEER))
+        self.actions.append(
+            self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units).first(AbilityId.MORPH_OVERSEER)
+        )
 
     @property_cache_once_per_frame
     def need_worker_mineral(self):
