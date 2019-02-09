@@ -333,7 +333,7 @@ class MyBot(sc2.BotAI):
 
         for s in self.units(UnitTypeId.SPINECRAWLERUPROOTED).ready.idle:
             t = await self.find_placement(
-                UnitTypeId.SPINECRAWLER, self.rally_point.towards(self.game_info.map_center, 3), 4, False, 1)
+                UnitTypeId.SPINECRAWLER, self.rally_point.towards(self.game_info.map_center, 3), 5, False, 1)
             if t is not None:
                 self.actions.append(s(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT, t, queue=True))
 
@@ -344,14 +344,14 @@ class MyBot(sc2.BotAI):
                              placement_step=1)
 
         for s in self.units(UnitTypeId.SPORECRAWLER).ready.idle:
-            if s.tag not in self.air_defense and s.distance_to(self.rally_point) <= 6:
+            if s.tag not in self.air_defense and s.distance_to(self.rally_point) <= 8:
                 self.air_defense.add(s.tag)
             if s.tag in self.air_defense and s.distance_to(self.rally_point) > 10 and self.has_creep(self.rally_point):
                 self.actions.append(s(AbilityId.SPORECRAWLERUPROOT_SPORECRAWLERUPROOT))
 
         for s in self.units(UnitTypeId.SPORECRAWLERUPROOTED).ready.idle:
             t = await self.find_placement(
-                UnitTypeId.SPORECRAWLER, self.rally_point.towards(self.game_info.map_center, 3), 4, False, 1)
+                UnitTypeId.SPORECRAWLER, self.rally_point.towards(self.game_info.map_center, 3), 5, False, 1)
             if t is not None:
                 self.actions.append(s(AbilityId.SPORECRAWLERROOT_SPORECRAWLERROOT, t, queue=True))
 
