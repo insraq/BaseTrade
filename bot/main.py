@@ -377,9 +377,8 @@ class MyBot(sc2.BotAI):
             UnitTypeId.EXTRACTOR).amount * 3
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.est_defense_surplus > 0 or self.supply_used < 16 * 2):
-            for i in range(round(self.minerals / 50)):
-                self.production_order.append(UnitTypeId.DRONE)
+                (self.est_defense_surplus > 0 or self.count_unit(UnitTypeId.DRONE) < 16 * 2):
+            self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
         # infestor
