@@ -690,7 +690,7 @@ class MyBot(sc2.BotAI):
                     await self.build(b, near=p)
                     return
         if self.should_build(UnitTypeId.INFESTATIONPIT) and \
-                self.units(UnitTypeId.HYDRALISKDEN).ready.exists and \
+                self.units(UnitTypeId.LAIR).ready.exists and \
                 self.can_afford_or_change_production(UnitTypeId.INFESTATIONPIT):
             await self.build(UnitTypeId.INFESTATIONPIT, near=self.hq.position.random_on_distance(10))
 
