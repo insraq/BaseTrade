@@ -365,7 +365,7 @@ class MyBot(sc2.BotAI):
                 if not self.units(UnitTypeId.SPORECRAWLER).closer_than(10, t.position).exists and \
                         self.already_pending(UnitTypeId.SPORECRAWLER) == 0:
                     await self.build(UnitTypeId.SPORECRAWLER,
-                                     near=backwards(t.position, self.game_info.map_center, 3),
+                                     near=self.state.mineral_field.closer_than(10, t.position).center,
                                      random_alternative=False)
 
         need_workers = self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
