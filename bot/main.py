@@ -372,7 +372,7 @@ class MyBot(sc2.BotAI):
             UnitTypeId.EXTRACTOR).amount * 3
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.est_defense_surplus > 0 or self.supply_used < 14):
+                (self.est_defense_surplus > 0 or self.supply_used < 16 * 2):
             for i in range(round(self.minerals / 50)):
                 self.production_order.append(UnitTypeId.DRONE)
 
@@ -908,9 +908,9 @@ class MyBot(sc2.BotAI):
             o: Unit = o
             if o.health_percentage > 0.5:
                 return
-        self.actions.append(
-            self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units).first(AbilityId.MORPH_OVERSEER)
-        )
+        os = self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units)
+        if os.exists:
+            self.actions.append(os.first(AbilityId.MORPH_OVERSEER))
 
     @property_cache_once_per_frame
     def need_worker_mineral(self):
