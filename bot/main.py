@@ -400,8 +400,7 @@ class MyBot(sc2.BotAI):
 
         # zerglings
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
-            if self.townhalls.ready.amount == 1 and self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(
-                    UnitTypeId.XELNAGATOWER).amount:
+            if self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
                 self.production_order = [UnitTypeId.ZERGLING]
             elif is_zerg and self.units(UnitTypeId.ROACHWARREN).ready.exists and self.minerals - self.vespene < 100:
                 pass
@@ -713,6 +712,8 @@ class MyBot(sc2.BotAI):
                     if b == UnitTypeId.BANELINGNEST and self.count_unit(UnitTypeId.DRONE) < 16 * 2:
                         return
                     if b == UnitTypeId.INFESTATIONPIT and not self.units(UnitTypeId.LAIR).ready.exists:
+                        return
+                    if b == UnitTypeId.HYDRALISKDEN and self.count_unit(UnitTypeId.SWARMHOSTMP) < 5:
                         return
                     await self.build(b, near=p)
                     return
