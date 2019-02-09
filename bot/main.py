@@ -785,7 +785,7 @@ class MyBot(sc2.BotAI):
 
         self.units_attacked = self.units.tags_in(units_attacked)
         logger.info(
-            "surplus={} est_surplus={} dist={}",
+            "surplus=%s est_surplus=%s dist=%s",
             self.surplus_forces,
             self.est_surplus_forces,
             self.enemy_forces_distance
