@@ -712,8 +712,6 @@ class MyBot(sc2.BotAI):
                         return
                     if b == UnitTypeId.INFESTATIONPIT and not self.units(UnitTypeId.LAIR).ready.exists:
                         return
-                    if b == UnitTypeId.HYDRALISKDEN and self.count_unit(UnitTypeId.SWARMHOSTMP) < 5:
-                        return
                     await self.build(b, near=p)
                     return
 
