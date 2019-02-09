@@ -166,7 +166,7 @@ class MyBot(sc2.BotAI):
 
         # attacks
         if self.enemy_near_townhall.exists:
-            if self.enemy_near_townhall.amount > self.forces.amount + self.count_spinecrawler():
+            if self.enemy_near_townhall.amount > self.forces.amount + self.count_spinecrawler() * 2:
                 ws = self.workers.closer_than(20, self.enemy_near_townhall.first.position)
                 n = min(ws.amount, round(self.enemy_near_townhall.amount * 1.5))
                 if ws.filter(lambda w: w.is_attacking).amount < n:
@@ -218,28 +218,28 @@ class MyBot(sc2.BotAI):
                     continue
                 self.actions.append(unit.move(t))
         swarmhost = self.units(UnitTypeId.SWARMHOSTMP).ready
-        sa = []
-        if swarmhost.amount >= 5:
-            for s in swarmhost:
-                s: Unit = s
-                abilities = (await self.get_available_abilities([s]))[0]
-                if self.enemy_expansions.exists and AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
-                    e: Units = self.visible_enemy_units.closer_than(10, s.position)
-                    es: Units = self.known_enemy_structures.closer_than(20, s.position)
-                    if count_supply(e) > 5:
-                        self.actions.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, e.random.position))
-                        self.actions.append(s.move(self.rally_point, queue=True))
-                    elif es.exists:
-                        self.actions.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, es.random.position))
-                        self.actions.append(s.move(self.rally_point, queue=True))
-                    else:
+        for s in swarmhost:
+            s: Unit = s
+            e: Units = self.known_enemy_units.closer_than(15, s.position)
+            abilities = (await self.get_available_abilities([s]))[0]
+            if AbilityId.EFFECT_SPAWNLOCUSTS in abilities:
+                if count_supply(e) > 5 or e.structure.exists:
+                    self.actions.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, e.random.position))
+                else:
+                    if self.enemy_expansions.exists:
                         closest_exp = self.enemy_expansions.closest_to(s.position)
-                        sa.append(s.move(closest_exp.position.towards(self.start_location, 20)))
-                        sa.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, closest_exp.position, queue=True))
-                        sa.append(s.move(self.rally_point, queue=True))
+                    else:
+                        closest_exp = self.enemy_start_locations[0]
+                    self.actions.append(s.move(closest_exp.position.towards(self.start_location, 20)))
+                    self.actions.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, closest_exp.position, queue=True))
+            else:
+                if e.exists:
+                    t = backwards(s.position, e.closest_to(s.position).position, 15)
+                    self.actions.append(s.move(t))
+                else:
+                    self.actions.append(s.stop())
 
-        if len(sa) >= 15:
-            self.actions.extend(sa)
+
         # attack reactions
         for x in self.units_attacked:
             x: Unit = x
@@ -269,6 +269,8 @@ class MyBot(sc2.BotAI):
                 self.actions.append(x(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING))
             elif x.tag == self.first_overlord_tag:
                 self.actions.append(x.move(x.position.towards(self.game_info.map_center, 10)))
+            elif x.type_id == UnitTypeId.OVERLORD:
+                self.actions.append(x.move(x.position.towards(self.start_location, 10)))
 
         overseers = self.units(UnitTypeId.OVERSEER)
         if overseers.exists:
@@ -890,7 +892,11 @@ class MyBot(sc2.BotAI):
 
     @property_cache_once_per_frame
     def need_worker_mineral(self):
-        t = self.townhalls.ready.filter(lambda a: a.assigned_harvesters < a.ideal_harvesters)
+        def need_worker_townhall(a: Unit):
+            return a.assigned_harvesters < a.ideal_harvesters and \
+                   self.visible_enemy_units.closer_than(10, a.position).amount == 0
+
+        t = self.townhalls.ready.filter(need_worker_townhall)
         if t.exists:
             return self.state.mineral_field.closest_to(t.random.position)
         else:
@@ -932,10 +938,8 @@ class MyBot(sc2.BotAI):
             return False
         if self.townhalls.amount == 1 and self.supply_used == 14:
             return True
-        if not (self.units(UnitTypeId.ROACHWARREN).exists or
-                self.units(UnitTypeId.BANELINGNEST).exists or
-                self.count_unit(UnitTypeId.LAIR) > 0):
-            return self.townhalls.amount <= 2
+        if self.townhalls.amount < 3 and self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
+            return True
         full_workers = True
         total_ideal_harvesters = 0
         for t in self.townhalls.ready:
@@ -957,7 +961,7 @@ class MyBot(sc2.BotAI):
 
     @property_cache_once_per_frame
     def est_defense_surplus(self):
-        return self.est_surplus_forces + self.count_spinecrawler() * 2
+        return self.est_surplus_forces > 0 or self.surplus_forces + self.count_spinecrawler() * 2 > 0
 
     def count_spinecrawler(self):
         return self.count_unit(UnitTypeId.SPINECRAWLER) + self.count_unit(UnitTypeId.SPINECRAWLERUPROOTED)
@@ -1045,6 +1049,7 @@ def has_order(u: Unit, ability_id: AbilityId):
         if o.ability == ability_id:
             return True
     return False
+
 
 def count_supply(units: Units) -> float:
     count = 0

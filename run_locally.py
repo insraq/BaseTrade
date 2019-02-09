@@ -14,7 +14,7 @@ def main():
         info = json.load(f)
 
     race = Race[info["race"]]
-    run_game(maps.get("(2)RedShiftLE"), [
+    run_game(maps.get("(2)DreamcatcherLE"), [
         Bot(race, MyBot()),
         # Bot(Race.Zerg, WorkerRushBot()),
         Computer(Race.Random, Difficulty.VeryHard),
