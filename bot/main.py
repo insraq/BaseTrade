@@ -185,7 +185,7 @@ class MyBot(sc2.BotAI):
                     continue
                 # fight within spinecrawler
                 sc = self.units(UnitTypeId.SPINECRAWLER)
-                if not sc.exists or \
+                if not sc.exists or self.enemy_near_townhall.not_flying.amount <= 0 or \
                         sc.closest_distance_to(self.enemy_near_townhall.first) > 15:
                     self.move_and_attack(unit, self.enemy_near_townhall.first.position)
                     continue
