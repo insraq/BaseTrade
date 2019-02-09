@@ -425,7 +425,8 @@ class MyBot(sc2.BotAI):
             else:
                 exps = self.start_location.sort_by_distance(self.expansion_locations.keys())
             for p in exps:
-                if await self.can_place(UnitTypeId.HATCHERY, p):
+                if p.distance_to(self.start_location) <= p.distance_to(self.enemy_start_locations[0]) and \
+                        await self.can_place(UnitTypeId.HATCHERY, p):
                     self.expand_target = p
                     await self.expand_now(None, 2, p)
                     return
