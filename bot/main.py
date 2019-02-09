@@ -136,12 +136,14 @@ class MyBot(sc2.BotAI):
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
                 UnitTypeId.BANELINGNEST,
+                UnitTypeId.INFESTATIONPIT,
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
         elif is_protoss:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
+                UnitTypeId.INFESTATIONPIT,
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
@@ -149,6 +151,7 @@ class MyBot(sc2.BotAI):
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
                 UnitTypeId.ROACHWARREN,
+                UnitTypeId.INFESTATIONPIT,
                 UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
             ]
@@ -533,7 +536,7 @@ class MyBot(sc2.BotAI):
             if AbilityId.BUILD_CREEPTUMOR_QUEEN in abilities:
                 t = self.townhalls.ready.furthest_to(self.start_location).position.random_on_distance(6)
                 if creep_tumors.exists:
-                    ct = creep_tumors.furthest_to(self.start_location).position.random_on_distance(10)
+                    ct = creep_tumors.furthest_to(self.start_location).position.random_on_distance(6)
                     if ct.distance2_to(self.start_location) > t.distance2_to(self.start_location):
                         t = ct
                 if self.has_creep(t) and self.can_place_creep_tumor(t):
@@ -682,6 +685,8 @@ class MyBot(sc2.BotAI):
         if self.est_surplus_forces < 0:
             return
         for b in self.build_order:
+            if b == UnitTypeId.INFESTATIONPIT:
+                return
             u = self.units(b).ready.idle
             if u.exists:
                 abilities = await self.get_available_abilities(u.first, ignore_resource_requirements=True)
@@ -705,14 +710,10 @@ class MyBot(sc2.BotAI):
                         return
                     if b == UnitTypeId.BANELINGNEST and self.count_unit(UnitTypeId.DRONE) < 16 * 2:
                         return
-                    if b == UnitTypeId.HYDRALISKDEN and not self.units(UnitTypeId.LAIR).ready.exists:
+                    if b == UnitTypeId.INFESTATIONPIT and not self.units(UnitTypeId.LAIR).ready.exists:
                         return
                     await self.build(b, near=p)
                     return
-        if self.should_build(UnitTypeId.INFESTATIONPIT) and \
-                self.units(UnitTypeId.LAIR).ready.exists and \
-                self.can_afford_or_change_production(UnitTypeId.INFESTATIONPIT):
-            await self.build(UnitTypeId.INFESTATIONPIT, near=self.hq.position.random_on_distance(10))
 
         if self.count_unit(UnitTypeId.EVOLUTIONCHAMBER) == 1 and self.supply_used > 100:
             await self.build(UnitTypeId.EVOLUTIONCHAMBER, near=self.hq.position.random_on_distance(10))
