@@ -353,7 +353,7 @@ class MyBot(sc2.BotAI):
             UnitTypeId.EXTRACTOR).amount * 3
         if need_workers and \
                 self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.est_defense_surplus >= 0 or self.supply_used < 14):
+                (self.est_defense_surplus > 0 or self.supply_used < 14):
             for i in range(round(self.minerals / 50)):
                 self.production_order.append(UnitTypeId.DRONE)
 
@@ -667,6 +667,8 @@ class MyBot(sc2.BotAI):
                 abilities = await self.get_available_abilities(u.first, ignore_resource_requirements=True)
                 if AbilityId.RESEARCH_GLIALREGENERATION in abilities:
                     abilities.remove(AbilityId.RESEARCH_GLIALREGENERATION)
+                if AbilityId.RESEARCH_MUSCULARAUGMENTS in abilities and self.count_unit(UnitTypeId.HYDRALISK) < 10:
+                    abilities.remove(AbilityId.RESEARCH_MUSCULARAUGMENTS)
                 if len(abilities) > 0 and self.can_afford_or_change_production(abilities[0]):
                     self.actions.append(u.first(abilities[0]))
 
@@ -688,8 +690,7 @@ class MyBot(sc2.BotAI):
                     await self.build(b, near=p)
                     return
         if self.should_build(UnitTypeId.INFESTATIONPIT) and \
-                self.townhalls.amount >= 4 and \
-                self.units(UnitTypeId.LAIR).ready.exists and \
+                self.units(UnitTypeId.HYDRALISKDEN).ready.exists and \
                 self.can_afford_or_change_production(UnitTypeId.INFESTATIONPIT):
             await self.build(UnitTypeId.INFESTATIONPIT, near=self.hq.position.random_on_distance(10))
 
