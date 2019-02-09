@@ -340,7 +340,7 @@ class MyBot(sc2.BotAI):
             if t is not None:
                 self.actions.append(s(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT, t, queue=True))
 
-        if len(self.air_defense) < self.enemy_air_forces_supply / 4 and self.townhalls.ready.amount >= 3:
+        if len(self.air_defense) < self.enemy_air_forces_supply / 4 and self.workers.amount >= 32:
             await self.build(UnitTypeId.SPORECRAWLER,
                              self.rally_point.towards(self.game_info.map_center, 2),
                              max_distance=4,
@@ -366,7 +366,7 @@ class MyBot(sc2.BotAI):
             queen_nearby = await self.dist_workers_and_inject_larva(t)
             if self.units(UnitTypeId.QUEEN).find_by_tag(self.creep_queen_tag) is None and queen_nearby.amount > 1:
                 self.creep_queen_tag = queen_nearby[1].tag
-            if self.townhalls.amount >= 3:
+            if self.workers.amount >= 32:
                 if not self.units(UnitTypeId.SPORECRAWLER).closer_than(10, t.position).exists and \
                         self.already_pending(UnitTypeId.SPORECRAWLER) == 0:
                     await self.build(UnitTypeId.SPORECRAWLER,
@@ -375,9 +375,7 @@ class MyBot(sc2.BotAI):
 
         need_workers = self.count_unit(UnitTypeId.DRONE) < self.townhalls.amount * 16 + self.units(
             UnitTypeId.EXTRACTOR).amount * 3
-        if need_workers and \
-                self.count_unit(UnitTypeId.DRONE) < 76 and \
-                (self.est_defense_surplus > 0 or self.count_unit(UnitTypeId.DRONE) < 16 * 2):
+        if need_workers and self.count_unit(UnitTypeId.DRONE) < 76 and self.should_produce_worker():
             self.production_order.append(UnitTypeId.DRONE)
 
         # production queue
@@ -392,18 +390,20 @@ class MyBot(sc2.BotAI):
 
         # swarm host
         if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.SWARMHOSTMP) < 10:
-            if self.supply_used > 150:
-                self.production_order = [UnitTypeId.SWARMHOSTMP]
+            if UnitTypeId.DRONE in self.production_order:
+                self.production_order = [UnitTypeId.SWARMHOSTMP, UnitTypeId.DRONE]
             else:
-                self.production_order.insert(0, UnitTypeId.SWARMHOSTMP)
+                self.production_order = [UnitTypeId.SWARMHOSTMP]
 
         # zerglings
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
             if self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
                 self.production_order = [UnitTypeId.ZERGLING]
-            elif is_zerg and self.units(UnitTypeId.ROACHWARREN).ready.exists and self.minerals - self.vespene < 100:
-                pass
-            elif self.units(UnitTypeId.HYDRALISKDEN).ready.exists and self.minerals - self.vespene < 100:
+            elif self.units.of_type({
+                UnitTypeId.ROACHWARREN,
+                UnitTypeId.HYDRALISKDEN,
+                UnitTypeId.INFESTATIONPIT
+            }).ready.exists and self.minerals - self.vespene < 100:
                 pass
             else:
                 self.production_order.append(UnitTypeId.ZERGLING)
@@ -419,7 +419,6 @@ class MyBot(sc2.BotAI):
                 not self.units(UnitTypeId.HIVE).exists and \
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
-                self.should_upgrade_lair() and \
                 self.can_afford_or_change_production(UnitTypeId.LAIR):
             self.actions.append(self.hq.build(UnitTypeId.LAIR))
 
@@ -578,6 +577,13 @@ class MyBot(sc2.BotAI):
                 self.actions.append(queen(AbilityId.EFFECT_INJECTLARVA, townhall))
         return queen_nearby
 
+    def should_produce_worker(self):
+        if self.townhalls.ready.amount == 1 and self.count_unit(UnitTypeId.DRONE) < 14:
+            return True
+        if not self.units(UnitTypeId.LAIR).exists:
+            return True
+        return self.est_defense_surplus >= 0
+
     def calc_creep_tumor_position(self, u: Unit):
         for i in range(0, 5):
             t = u.position.towards_with_random_angle(self.enemy_start_locations[0], 10, math.pi / 4)
@@ -592,15 +598,6 @@ class MyBot(sc2.BotAI):
             if self.can_place_creep_tumor(t):
                 return t
         return None
-
-    def should_upgrade_lair(self):
-        if self.enemy_air_forces_supply >= 8:
-            return True
-        if UnitTypeId.ROACHWARREN in self.build_order:
-            return self.count_unit(UnitTypeId.ROACH) > 0
-        if UnitTypeId.BANELINGNEST in self.build_order:
-            return self.count_unit(UnitTypeId.BANELINGNEST) > 0
-        return self.workers.amount >= 16 * 2
 
     def move_and_attack(self, u: Unit, t: Point2):
         banelings: Units = self.visible_enemy_units.of_type({UnitTypeId.BANELING}).closer_than(4, u.position)
@@ -711,6 +708,8 @@ class MyBot(sc2.BotAI):
                     if b == UnitTypeId.BANELINGNEST and self.count_unit(UnitTypeId.DRONE) < 16 * 2:
                         return
                     if b == UnitTypeId.INFESTATIONPIT and not self.units(UnitTypeId.LAIR).ready.exists:
+                        return
+                    if b == UnitTypeId.HYDRALISKDEN and self.count_unit(UnitTypeId.SWARMHOSTMP) < 5:
                         return
                     await self.build(b, near=p)
                     return
@@ -926,7 +925,7 @@ class MyBot(sc2.BotAI):
             return None
 
     def should_build_extractor(self):
-        if self.vespene - self.minerals > 100:
+        if self.vespene > self.minerals:
             return False
         if not self.units(UnitTypeId.SPAWNINGPOOL).exists:
             return False
@@ -934,8 +933,8 @@ class MyBot(sc2.BotAI):
             return True
         if self.townhalls.ready.amount < 2:
             return False
-        if self.townhalls.amount < 3:
-            return self.count_unit(UnitTypeId.EXTRACTOR) == 0
+        if not self.units(UnitTypeId.LAIR).exists:
+            return self.count_unit(UnitTypeId.EXTRACTOR) < 1
         if self.townhalls.amount < 4:
             return self.count_unit(UnitTypeId.EXTRACTOR) < self.townhalls.ready.amount * 2 - 2
         else:
