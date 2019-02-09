@@ -13,7 +13,7 @@ from sc2.position import Point2, Rect
 from sc2.unit import Unit, UnitOrder
 from sc2.units import Units
 
-logger = logging.getLogger(__name__)
+logger = sc2.main.logger
 
 HEALTH_PERCENT = 0.1
 
@@ -574,7 +574,7 @@ class MyBot(sc2.BotAI):
         if self.enemy_air_forces_supply > 8:
             return True
         if UnitTypeId.ROACHWARREN in self.build_order:
-            return self.count_unit(UnitTypeId.ROACH) >= 10
+            return self.count_unit(UnitTypeId.ROACH) > 0
         if UnitTypeId.BANELINGNEST in self.build_order:
             return self.count_unit(UnitTypeId.BANELINGNEST) > 0
         return self.workers.amount >= 16 * 2
@@ -841,7 +841,7 @@ class MyBot(sc2.BotAI):
         else:
             scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units | self.base_trade_units)
         if not scouts.exists:
-            scouts = self.units(UnitTypeId.OVERLORD)
+            scouts = self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units)
         return scouts
 
     async def scout_expansions(self):
