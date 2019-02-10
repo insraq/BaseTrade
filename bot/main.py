@@ -379,13 +379,18 @@ class MyBot(sc2.BotAI):
             if t is not None:
                 self.actions.append(s(AbilityId.SPORECRAWLERROOT_SPORECRAWLERROOT, t, queue=True))
 
+        for q in self.units(UnitTypeId.QUEEN):
+            es: Units = self.visible_enemy_units.filter(lambda u: u.target_in_range(q))
+            if es.exists and self.townhalls.closest_distance_to(q) < 10:
+                self.move_and_attack(q, es.closest_to(q))
+
         # economy
         for t in self.townhalls.ready:
             t: Unit = t
             queen_nearby = await self.dist_workers_and_inject_larva(t)
             if self.units(UnitTypeId.QUEEN).find_by_tag(self.creep_queen_tag) is None and queen_nearby.amount > 1:
                 self.creep_queen_tag = queen_nearby[1].tag
-            if self.townhalls.ready.amount > 2:
+            if self.workers.amount >= 32:
                 if not self.units(UnitTypeId.SPORECRAWLER).closer_than(10, t.position).exists and \
                         self.already_pending(UnitTypeId.SPORECRAWLER) == 0:
                     await self.build(UnitTypeId.SPORECRAWLER,
