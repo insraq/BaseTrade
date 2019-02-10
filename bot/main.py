@@ -291,6 +291,16 @@ class MyBot(sc2.BotAI):
         if changelings.exists:
             self.actions.append(changelings.first.move(self.enemy_start_locations[0]))
 
+        for x in self.units.tags_in(self.scout_units):
+            x: Unit = x
+            es: Units = self.visible_enemy_units.filter(lambda e: e.target_in_range(x))
+            if es.exists:
+                e: Unit = es.closest_to(x.position)
+                t = backwards(x.position, e.position, e.ground_range + x.radius)
+                self.actions.append(x.move(t))
+            elif len(x.orders) > 1:
+                self.actions.append(x.move(self.enemy_start_locations[0]))
+
         # counter timing attack
         if await self.defend_early_rush():
             await self.do_actions(self.actions)
@@ -432,8 +442,6 @@ class MyBot(sc2.BotAI):
 
         if self.enemy_expansions.exists:
             await self.call_every(self.scout_expansions, 2 * 60)
-        else:
-            await self.call_every(self.scout_expansions, 60)
         await self.call_every(self.scout_watchtower, 60)
         await self.fill_creep_tumor()
         await self.make_overseer()
@@ -481,7 +489,7 @@ class MyBot(sc2.BotAI):
 
         for a in self.units(UnitTypeId.EXTRACTOR).ready:
             a: Unit = a
-            if self.vespene - self.minerals > 200:
+            if self.vespene - self.minerals > 100:
                 w: Units = self.empty_workers.closer_than(2.5, a)
                 t: Unit = self.townhalls.closest_to(a.position)
                 if t.surplus_harvesters < 0 and t.distance_to(a) < 10 and w.exists and w.first.order_target == a.tag:
@@ -580,7 +588,7 @@ class MyBot(sc2.BotAI):
     def should_produce_worker(self):
         if self.townhalls.ready.amount == 1 and self.count_unit(UnitTypeId.DRONE) < 14:
             return True
-        if not self.units(UnitTypeId.LAIR).exists:
+        if not self.units.of_type({UnitTypeId.HYDRALISKDEN, UnitTypeId.ROACHWARREN}).exists:
             return True
         return self.est_defense_surplus >= 0
 
