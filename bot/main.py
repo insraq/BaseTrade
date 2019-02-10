@@ -156,7 +156,6 @@ class MyBot(sc2.BotAI):
                 UnitTypeId.HYDRALISKDEN,
             ]
 
-
         # supply_cap does not include overload that is being built
         est_supply_cap = (self.count_unit(UnitTypeId.OVERLORD)) * 8 + self.townhalls.ready.amount * 6
         est_supply_left = est_supply_cap - self.supply_used
@@ -311,6 +310,10 @@ class MyBot(sc2.BotAI):
             await self.do_actions(self.actions)
             return
 
+        if await self.should_rush():
+            await self.do_actions(self.actions)
+            return
+
         # base trade
         if self.enemy_expansions.exists:
             p = self.enemy_expansions[0].position.closest(self.far_corners)
@@ -327,7 +330,7 @@ class MyBot(sc2.BotAI):
                 z.patrol(p.towards(self.game_info.map_center, 10), queue=True),
             ])
 
-        if self.enemy_forces_distance < half_size or self.enemy_near_townhall.amount > 5 or self.supply_used > 190:
+        if self.should_base_trade():
             for f in self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units):
                 if f.is_patrolling:
                     self.actions.append(f.attack(self.enemy_start_locations[0]))
@@ -563,6 +566,25 @@ class MyBot(sc2.BotAI):
                     t = self.calc_creep_tumor_position(u)
                     if t is not None:
                         self.actions.append(u(AbilityId.BUILD_CREEPTUMOR_TUMOR, t))
+
+    @property_cache_once_per_frame
+    def enemy_expansions_count(self) -> int:
+        if self.enemy_expansions.amount == 0:
+            return 1
+        if self.enemy_expansions.closest_distance_to(self.enemy_start_locations[0]) > 5:
+            return self.enemy_expansions.amount + 1
+
+    def should_base_trade(self):
+        half_size = self.start_location.distance_to(self.game_info.map_center)
+        if self.enemy_forces_distance < half_size:
+            return True
+        if self.enemy_near_townhall.amount > 5:
+            return True
+        if self.supply_used > 190:
+            return True
+        if self.known_enemy_structures.exists and \
+                self.known_enemy_units.closest_distance_to(self.forces.center) < 15:
+            return True
 
     def drone_gather(self):
         for d in self.units(UnitTypeId.DRONE).idle:
@@ -1005,6 +1027,25 @@ class MyBot(sc2.BotAI):
 
     def count_spinecrawler(self):
         return self.count_unit(UnitTypeId.SPINECRAWLER) + self.count_unit(UnitTypeId.SPINECRAWLERUPROOTED)
+
+    async def should_rush(self):
+        if self.townhalls.ready.amount == 2 and self.enemy_expansions_count == 2 and self.est_surplus_forces > 0:
+            self.base_trade_units = set()
+            self.train(UnitTypeId.ZERGLING)
+            await self.upgrade_building()
+            for z in self.units(UnitTypeId.ZERGLING):
+                z: Unit = z
+                if self.surplus_forces > 0:
+                    self.actions.append(z.attack(self.enemy_start_locations[0]))
+                else:
+                    if self.known_enemy_units.exists:
+                        t = self.units.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center,
+                                                                                              15)
+                    else:
+                        t = self.game_info.map_center.towards(self.enemy_start_locations[0], 15)
+                    self.actions.append(z.move(t))
+            return True
+        return False
 
     async def defend_early_rush(self) -> bool:
         half_size = self.start_location.distance_to(self.game_info.map_center)
