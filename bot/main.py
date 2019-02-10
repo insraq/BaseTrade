@@ -290,7 +290,11 @@ class MyBot(sc2.BotAI):
 
         changelings = self.units(UnitTypeId.CHANGELING).idle
         if changelings.exists:
-            self.actions.append(changelings.first.move(self.enemy_start_locations[0]))
+            locs = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locations.keys()))
+            locs.reverse()
+            for i, p in enumerate(locs):
+                if not self.is_visible(p) and p.distance_to(self.enemy_start_locations[0]) < half_size:
+                    self.actions.append(changelings.first.move(p, queue=i > 0))
 
         for x in self.units.tags_in(self.scout_units):
             x: Unit = x
@@ -430,7 +434,7 @@ class MyBot(sc2.BotAI):
         if not self.units(UnitTypeId.LAIR).exists and \
                 not self.units(UnitTypeId.HIVE).exists and \
                 self.already_pending(UnitTypeId.LAIR, all_units=True) == 0 and \
-                self.units(UnitTypeId.SPAWNINGPOOL).ready.exists and \
+                self.already_pending_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED) > 0 and \
                 self.can_afford_or_change_production(UnitTypeId.LAIR):
             self.actions.append(self.hq.build(UnitTypeId.LAIR))
 
@@ -442,8 +446,7 @@ class MyBot(sc2.BotAI):
                 self.can_afford_or_change_production(UnitTypeId.HIVE):
             self.actions.append(self.hq.build(UnitTypeId.HIVE))
 
-        if self.enemy_expansions.exists:
-            await self.call_every(self.scout_expansions, 2 * 60)
+        await self.call_every(self.scout_expansions, 2 * 60)
         await self.call_every(self.scout_watchtower, 60)
         await self.fill_creep_tumor()
         await self.make_overseer()
@@ -591,6 +594,8 @@ class MyBot(sc2.BotAI):
     def should_produce_worker(self):
         if self.townhalls.ready.amount == 1 and self.count_unit(UnitTypeId.DRONE) < 14:
             return True
+        if self.count_unit(UnitTypeId.ZERGLING) < 6 and self.count_unit(UnitTypeId.DRONE) >= 14:
+            return False
         if not self.units.of_type({UnitTypeId.HYDRALISKDEN, UnitTypeId.ROACHWARREN}).exists:
             return True
         return self.est_defense_surplus >= 0
@@ -688,10 +693,6 @@ class MyBot(sc2.BotAI):
         return forces_supply - self.enemy_forces_supply
 
     async def upgrade_building(self):
-        if self.workers.collecting.amount < 32:
-            return
-        if self.est_defense_surplus < 0:
-            return
         for b in self.build_order:
             if b == UnitTypeId.INFESTATIONPIT:
                 continue
@@ -889,9 +890,7 @@ class MyBot(sc2.BotAI):
         ):
             return
         s = self.potential_scout_units()
-        print("Prepare to scout", self.time)
         if s.exists:
-            print("Scout unit exists", self.time)
             scout = s.random
             self.scout_units.add(scout.tag)
             locs = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locations.keys()))
