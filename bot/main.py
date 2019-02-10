@@ -538,8 +538,9 @@ class MyBot(sc2.BotAI):
                 UnitTypeId.QUEEN not in self.production_order and \
                 self.townhalls.amount >= 2 and \
                 self.count_unit(UnitTypeId.QUEEN) <= self.townhalls.ready.amount and \
+                self.townhalls.ready.idle.exists and \
                 self.can_afford_or_change_production(UnitTypeId.QUEEN):
-            self.actions.append(self.townhalls.ready.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
+            self.actions.append(self.townhalls.ready.idle.furthest_to(self.start_location).train(UnitTypeId.QUEEN))
         if creep_queen is not None and creep_queen.is_idle:
             abilities = await self.get_available_abilities(creep_queen)
             if AbilityId.BUILD_CREEPTUMOR_QUEEN in abilities:
@@ -705,7 +706,9 @@ class MyBot(sc2.BotAI):
                     abilities = [AbilityId.RESEARCH_ZERGGROUNDARMORLEVEL3]
                 if AbilityId.RESEARCH_GLIALREGENERATION in abilities:
                     abilities.remove(AbilityId.RESEARCH_GLIALREGENERATION)
-                if AbilityId.RESEARCH_MUSCULARAUGMENTS in abilities and self.count_unit(UnitTypeId.HYDRALISK) < 10:
+                if AbilityId.RESEARCH_MUSCULARAUGMENTS in abilities and \
+                        self.count_unit(UnitTypeId.HYDRALISK) < 10 and \
+                        self.supply_used < 190:
                     abilities.remove(AbilityId.RESEARCH_MUSCULARAUGMENTS)
                 if len(abilities) > 0 and self.can_afford_or_change_production(abilities[0]):
                     self.actions.append(u.first(abilities[0]))
