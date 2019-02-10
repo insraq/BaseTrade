@@ -589,7 +589,7 @@ class MyBot(sc2.BotAI):
         half_size = self.start_location.distance_to(self.game_info.map_center)
         if self.enemy_forces_distance < half_size:
             return True
-        if self.enemy_near_townhall.amount > 5:
+        if count_supply(self.enemy_near_townhall) > 5:
             return True
         if self.supply_used > 190:
             return True
