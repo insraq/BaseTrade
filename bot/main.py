@@ -350,7 +350,8 @@ class MyBot(sc2.BotAI):
             if t is not None:
                 self.actions.append(s(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT, t, queue=True))
 
-        if len(self.air_defense) < self.enemy_air_forces_supply / 4 and self.workers.amount >= 32:
+        af = len(self.air_defense) * 4 + self.forces.of_type({UnitTypeId.HYDRALISK}).amount * 2
+        if af < self.enemy_air_forces_supply and self.workers.amount >= 32:
             await self.build(UnitTypeId.SPORECRAWLER,
                              self.rally_point.towards(self.game_info.map_center, 2),
                              max_distance=4,
