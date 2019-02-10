@@ -286,8 +286,9 @@ class MyBot(sc2.BotAI):
             for i, a in enumerate(abilities):
                 if AbilityId.SPAWNCHANGELING_SPAWNCHANGELING in a:
                     u: Unit = overseers[i]
-                    if u.distance_to(self.attack_target) > 20:
-                        self.actions.append(u.move(self.attack_target.towards(self.game_info.map_center, 20)))
+                    if u.distance_to(self.attack_target) > 25:
+                        self.actions.append(
+                            u.move(self.attack_target.towards_with_random_angle(self.game_info.map_center, 25)))
                     self.actions.append(u(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING, queue=True))
 
         changelings = self.units(UnitTypeId.CHANGELING).idle
