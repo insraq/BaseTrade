@@ -310,10 +310,6 @@ class MyBot(sc2.BotAI):
             await self.do_actions(self.actions)
             return
 
-        if await self.should_rush():
-            await self.do_actions(self.actions)
-            return
-
         # base trade
         if self.enemy_expansions.exists:
             p = self.enemy_expansions[0].position.closest(self.far_corners)
@@ -416,7 +412,7 @@ class MyBot(sc2.BotAI):
 
         # zerglings
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
-            if self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
+            if self.count_unit(UnitTypeId.ZERGLING) < 10 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
                 self.production_order = [UnitTypeId.ZERGLING]
             elif self.units.of_type({
                 UnitTypeId.ROACHWARREN,
@@ -1027,25 +1023,6 @@ class MyBot(sc2.BotAI):
 
     def count_spinecrawler(self):
         return self.count_unit(UnitTypeId.SPINECRAWLER) + self.count_unit(UnitTypeId.SPINECRAWLERUPROOTED)
-
-    async def should_rush(self):
-        if self.townhalls.ready.amount == 2 and self.enemy_expansions_count == 2 and self.est_surplus_forces > 0:
-            self.base_trade_units = set()
-            self.train(UnitTypeId.ZERGLING)
-            await self.upgrade_building()
-            for z in self.units(UnitTypeId.ZERGLING):
-                z: Unit = z
-                if self.surplus_forces > 0:
-                    self.actions.append(z.attack(self.enemy_start_locations[0]))
-                else:
-                    if self.known_enemy_units.exists:
-                        t = self.units.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center,
-                                                                                              15)
-                    else:
-                        t = self.game_info.map_center.towards(self.enemy_start_locations[0], 15)
-                    self.actions.append(z.move(t))
-            return True
-        return False
 
     async def defend_early_rush(self) -> bool:
         half_size = self.start_location.distance_to(self.game_info.map_center)
