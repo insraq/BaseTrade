@@ -298,7 +298,7 @@ class MyBot(sc2.BotAI):
                 e: Unit = es.closest_to(x.position)
                 t = backwards(x.position, e.position, e.ground_range + x.radius)
                 self.actions.append(x.move(t))
-            elif len(x.orders) > 1:
+            elif len(x.orders) <= 1:
                 self.actions.append(x.move(self.enemy_start_locations[0]))
 
         # counter timing attack
@@ -869,7 +869,7 @@ class MyBot(sc2.BotAI):
         if self.supply_used > 190 and self.already_pending(UpgradeId.OVERLORDSPEED) == 1:
             scouts = self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units)
         else:
-            scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units | self.base_trade_units)
+            scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
         if not scouts.exists:
             scouts = self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units)
         return scouts
@@ -881,13 +881,15 @@ class MyBot(sc2.BotAI):
         ):
             return
         s = self.potential_scout_units()
+        print("Prepare to scout")
         if s.exists:
+            print("Scout unit exists")
             scout = s.random
             self.scout_units.add(scout.tag)
             locs = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locations.keys()))
             locs.reverse()
             for i, p in enumerate(locs):
-                if not self.is_visible(p):
+                if not self.is_visible(p) and not self.known_enemy_units.closer_than(10, p).exists:
                     self.actions.append(scout.move(p, queue=i > 0))
             self.time_table["scout_expansions"] = self.time
 
@@ -969,8 +971,8 @@ class MyBot(sc2.BotAI):
             return False
         if self.townhalls.amount == 1 and self.supply_used == 14:
             return True
-        if self.townhalls.amount < 3 and self.units(UnitTypeId.INFESTATIONPIT).ready.exists:
-            return True
+        if self.townhalls.amount < 3:
+            return self.units(UnitTypeId.INFESTATIONPIT).ready.exists
         full_workers = True
         total_ideal_harvesters = 0
         for t in self.townhalls.ready:
