@@ -48,6 +48,7 @@ class MyBot(sc2.BotAI):
         self.reached_full_supply = False
         self.expand_target: Point2 = None
         self.air_defense = set()
+        self.last_extractor_time = 0
 
         # enemy stats
         self.enemy_expansions: Units = None
@@ -204,6 +205,9 @@ class MyBot(sc2.BotAI):
                         self.actions.append(
                             unit(AbilityId.EFFECT_SPAWNLOCUSTS, self.enemy_near_townhall.first.position))
         elif self.supply_used > 190 or self.surplus_forces > len(self.base_trade_units) * 0.5:
+            for w in self.workers:
+                if w.is_attacking:
+                    self.actions.append(w.stop())
             for unit in self.forces:
                 if unit.type_id == UnitTypeId.INFESTOR:
                     self.infestor_cast(unit)
@@ -354,20 +358,20 @@ class MyBot(sc2.BotAI):
             if t is not None:
                 self.actions.append(s(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT, t, queue=True))
 
+        for s in self.units(UnitTypeId.SPORECRAWLER):
+            if s.tag not in self.air_defense and s.distance_to(self.rally_point) <= 10:
+                self.air_defense.add(s.tag)
+            if s.is_idle and s.is_ready and \
+                    s.tag in self.air_defense and s.distance_to(self.rally_point) > 10 and \
+                    self.has_creep(self.rally_point):
+                self.actions.append(s(AbilityId.SPORECRAWLERUPROOT_SPORECRAWLERUPROOT))
+
         af = len(self.air_defense) * 4 + self.forces.of_type({UnitTypeId.HYDRALISK}).amount * 2
         if af < self.enemy_air_forces_supply and self.workers.amount >= 32:
             await self.build(UnitTypeId.SPORECRAWLER,
                              self.rally_point.towards(self.game_info.map_center, 2),
                              max_distance=4,
                              placement_step=1)
-
-        for s in self.units(UnitTypeId.SPORECRAWLER):
-            if s.tag not in self.air_defense and s.distance_to(self.rally_point) <= 8:
-                self.air_defense.add(s.tag)
-            if s.is_idle and s.is_ready and \
-                    s.tag in self.air_defense and s.distance_to(self.rally_point) > 10 and \
-                    self.has_creep(self.rally_point):
-                self.actions.append(s(AbilityId.SPORECRAWLERUPROOT_SPORECRAWLERUPROOT))
 
         for s in self.units(UnitTypeId.SPORECRAWLERUPROOTED).ready.idle:
             t = await self.find_placement(
@@ -489,7 +493,8 @@ class MyBot(sc2.BotAI):
             self.actions.append(o.first.move(self.rally_point.towards(self.game_info.map_center, 25), queue=True))
 
         # extractor and gas gathering
-        if self.should_build_extractor():
+        if self.should_build_extractor() and self.time - self.last_extractor_time > 5:
+            self.last_extractor_time = self.time
             drone = self.empty_workers.random
             target = self.state.vespene_geyser.filter(lambda u: not u.is_mine).closest_to(drone.position)
             if self.townhalls.ready.closest_distance_to(target.position) < 10:
