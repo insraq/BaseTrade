@@ -414,6 +414,10 @@ class MyBot(sc2.BotAI):
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
             if self.count_unit(UnitTypeId.ZERGLING) < 10 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
                 self.production_order = [UnitTypeId.ZERGLING]
+            elif self.townhalls.ready.amount == 2 and \
+                    self.enemy_expansions_count < 2 and \
+                    self.count_unit(UnitTypeId.ZERGLING) < 20:
+                self.production_order.insert(0, UnitTypeId.ZERGLING)
             elif self.units.of_type({
                 UnitTypeId.ROACHWARREN,
                 UnitTypeId.HYDRALISKDEN,
@@ -569,6 +573,8 @@ class MyBot(sc2.BotAI):
             return 1
         if self.enemy_expansions.closest_distance_to(self.enemy_start_locations[0]) > 5:
             return self.enemy_expansions.amount + 1
+        else:
+            return self.enemy_expansions.amount
 
     def should_base_trade(self):
         half_size = self.start_location.distance_to(self.game_info.map_center)
@@ -738,7 +744,7 @@ class MyBot(sc2.BotAI):
         for i, b in enumerate(self.build_order):
             for t in self.townhalls.sorted_by_distance_to(self.start_location):
                 t: Unit = t
-                p = t.position.random_on_distance(10)
+                p = self.find_building_location(t)
                 if (i == 0 or self.units(self.build_order[i - 1]).exists) and self.should_build(
                         b) and self.is_location_safe(p):
                     if b == UnitTypeId.ROACHWARREN and self.count_unit(UnitTypeId.DRONE) < 16 * 2:
@@ -753,7 +759,10 @@ class MyBot(sc2.BotAI):
                     return
 
         if self.count_unit(UnitTypeId.EVOLUTIONCHAMBER) == 1 and self.supply_used > 100:
-            await self.build(UnitTypeId.EVOLUTIONCHAMBER, near=self.hq.position.random_on_distance(10))
+            await self.build(UnitTypeId.EVOLUTIONCHAMBER, near=self.find_building_location(self.hq.position))
+
+    def find_building_location(self, t: Unit) -> Point2:
+        return backwards(t.position, self.state.mineral_field.closer_than(10, t.position).center, 10)
 
     def should_build(self, b):
         return not self.units(b).exists and self.already_pending(b) == 0 and self.can_afford(b)
