@@ -944,12 +944,12 @@ class MyBot(sc2.BotAI):
             return None
 
     def should_build_extractor(self):
-        if self.vespene > self.minerals:
+        if self.vespene - self.minerals > 100:
             return False
         if not self.units(UnitTypeId.SPAWNINGPOOL).exists:
             return False
-        if self.minerals - self.vespene > 500:
-            return True
+        if self.minerals - self.vespene > 400:
+            return self.count_unit(UnitTypeId.EXTRACTOR) < self.townhalls.ready.amount * 2
         if self.townhalls.ready.amount < 2:
             return False
         if not self.units(UnitTypeId.LAIR).exists:
