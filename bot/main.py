@@ -244,8 +244,7 @@ class MyBot(sc2.BotAI):
                     self.actions.append(s(AbilityId.EFFECT_SPAWNLOCUSTS, closest_exp.position, queue=True))
             else:
                 if e.exists:
-                    t = backwards(s.position, e.closest_to(s.position).position, 15)
-                    self.actions.append(s.move(t))
+                    self.actions.append(s.move(s.position.towards(self.rally_point, 15)))
                 else:
                     self.actions.append(s.stop())
 
@@ -421,7 +420,7 @@ class MyBot(sc2.BotAI):
 
         # zerglings
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
-            if self.count_unit(UnitTypeId.ZERGLING) < 10 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
+            if self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
                 self.production_order = [UnitTypeId.ZERGLING]
             elif self.townhalls.ready.amount == 2 and \
                     self.enemy_expansions_count < 2 and \
