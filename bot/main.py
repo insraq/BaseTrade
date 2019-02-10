@@ -298,16 +298,6 @@ class MyBot(sc2.BotAI):
                 if not self.is_visible(p) and p.distance_to(self.enemy_start_locations[0]) < half_size:
                     self.actions.append(changelings.first.move(p, queue=i > 0))
 
-        for x in self.units.tags_in(self.scout_units):
-            x: Unit = x
-            es: Units = self.visible_enemy_units.filter(lambda e: e.target_in_range(x))
-            if es.exists:
-                e: Unit = es.closest_to(x.position)
-                t = backwards(x.position, e.position, e.ground_range + x.radius)
-                self.actions.append(x.move(t))
-            elif len(x.orders) <= 1:
-                self.actions.append(x.move(self.enemy_start_locations[0]))
-
         # counter timing attack
         if await self.defend_early_rush():
             await self.do_actions(self.actions)
@@ -932,7 +922,7 @@ class MyBot(sc2.BotAI):
             locs = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locations.keys()))
             locs.reverse()
             for i, p in enumerate(locs):
-                if not self.is_visible(p) and not self.known_enemy_units.closer_than(10, p).exists:
+                if not self.is_visible(p):
                     self.actions.append(scout.move(p, queue=i > 0))
             self.time_table["scout_expansions"] = self.time
 
