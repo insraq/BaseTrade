@@ -316,7 +316,7 @@ class MyBot(sc2.BotAI):
         else:
             p = self.enemy_start_locations[0].closest(self.far_corners)
         zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units | self.scout_units)
-        if self.est_defense_surplus >= 0 and zs.exists and \
+        if self.est_defense_surplus > 0 and zs.exists and self.townhalls.amount > 2 and \
                 self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < self.forces.amount and \
                 self.already_pending_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED) == 1:
             z = zs.random
@@ -381,7 +381,7 @@ class MyBot(sc2.BotAI):
             queen_nearby = await self.dist_workers_and_inject_larva(t)
             if self.units(UnitTypeId.QUEEN).find_by_tag(self.creep_queen_tag) is None and queen_nearby.amount > 1:
                 self.creep_queen_tag = queen_nearby[1].tag
-            if self.workers.amount >= 32:
+            if self.townhalls.ready.amount > 2:
                 if not self.units(UnitTypeId.SPORECRAWLER).closer_than(10, t.position).exists and \
                         self.already_pending(UnitTypeId.SPORECRAWLER) == 0:
                     await self.build(UnitTypeId.SPORECRAWLER,
@@ -584,7 +584,7 @@ class MyBot(sc2.BotAI):
             return True
         if self.supply_used > 190:
             return True
-        if self.known_enemy_structures.exists and \
+        if self.known_enemy_units.exists and self.forces.exists and \
                 self.known_enemy_units.closest_distance_to(self.forces.center) < 15:
             return True
 
