@@ -969,7 +969,7 @@ class MyBot(sc2.BotAI):
             return False
         if self.townhalls.amount == 1 and self.supply_used == 14:
             return True
-        if self.townhalls.amount < 3 and self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
+        if self.townhalls.amount < 3 and self.units(UnitTypeId.INFESTATIONPIT).ready.exists:
             return True
         full_workers = True
         total_ideal_harvesters = 0
