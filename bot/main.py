@@ -372,7 +372,7 @@ class MyBot(sc2.BotAI):
         for q in self.units(UnitTypeId.QUEEN):
             es: Units = self.visible_enemy_units.filter(lambda u: u.target_in_range(q))
             if es.exists and self.townhalls.closest_distance_to(q) < 10:
-                self.move_and_attack(q, es.closest_to(q))
+                self.move_and_attack(q, es.closest_to(q).position)
 
         # economy
         for t in self.townhalls.ready:
@@ -404,7 +404,9 @@ class MyBot(sc2.BotAI):
 
         # swarm host
         if self.units(UnitTypeId.INFESTATIONPIT).ready.exists and self.count_unit(UnitTypeId.SWARMHOSTMP) < 10:
-            if UnitTypeId.DRONE in self.production_order:
+            if UnitTypeId.DRONE in self.production_order and \
+                    self.really_need_workers and \
+                    self.count_unit(UnitTypeId.DRONE) < 16 * 3:
                 self.production_order = [UnitTypeId.SWARMHOSTMP, UnitTypeId.DRONE]
             else:
                 self.production_order = [UnitTypeId.SWARMHOSTMP]
@@ -576,6 +578,11 @@ class MyBot(sc2.BotAI):
         else:
             return self.enemy_expansions.amount
 
+    @property_cache_once_per_frame
+    def really_need_workers(self) -> bool:
+        return self.count_unit(UnitTypeId.DRONE) < self.townhalls.ready.amount * 16 + self.units(
+            UnitTypeId.EXTRACTOR).ready.amount * 3
+
     def should_base_trade(self):
         half_size = self.start_location.distance_to(self.game_info.map_center)
         if self.enemy_forces_distance < half_size:
@@ -622,7 +629,7 @@ class MyBot(sc2.BotAI):
             return False
         if not self.units.of_type({UnitTypeId.HYDRALISKDEN, UnitTypeId.ROACHWARREN}).exists:
             return True
-        return self.est_defense_surplus >= 0
+        return self.est_defense_surplus >= 0 or self.really_need_workers
 
     def calc_creep_tumor_position(self, u: Unit):
         for i in range(0, 5):
