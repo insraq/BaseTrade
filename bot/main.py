@@ -137,24 +137,25 @@ class MyBot(sc2.BotAI):
                 UnitTypeId.SPAWNINGPOOL,
                 UnitTypeId.BANELINGNEST,
                 UnitTypeId.INFESTATIONPIT,
-                UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
-            ]
-        elif is_protoss:
-            self.build_order = [
-                UnitTypeId.SPAWNINGPOOL,
-                UnitTypeId.INFESTATIONPIT,
                 UnitTypeId.HYDRALISKDEN,
-                UnitTypeId.EVOLUTIONCHAMBER,
             ]
-        else:
+        elif is_zerg:
             self.build_order = [
                 UnitTypeId.SPAWNINGPOOL,
                 UnitTypeId.ROACHWARREN,
                 UnitTypeId.INFESTATIONPIT,
-                UnitTypeId.HYDRALISKDEN,
                 UnitTypeId.EVOLUTIONCHAMBER,
+                UnitTypeId.HYDRALISKDEN,
             ]
+        else:
+            self.build_order = [
+                UnitTypeId.SPAWNINGPOOL,
+                UnitTypeId.INFESTATIONPIT,
+                UnitTypeId.EVOLUTIONCHAMBER,
+                UnitTypeId.HYDRALISKDEN,
+            ]
+
 
         # supply_cap does not include overload that is being built
         est_supply_cap = (self.count_unit(UnitTypeId.OVERLORD)) * 8 + self.townhalls.ready.amount * 6
@@ -688,14 +689,20 @@ class MyBot(sc2.BotAI):
     async def upgrade_building(self):
         if self.workers.collecting.amount < 32:
             return
-        if self.est_surplus_forces < 0:
+        if self.est_defense_surplus < 0:
             return
         for b in self.build_order:
             if b == UnitTypeId.INFESTATIONPIT:
-                return
+                continue
             u = self.units(b).ready.idle
             if u.exists:
                 abilities = await self.get_available_abilities(u.first, ignore_resource_requirements=True)
+                if AbilityId.RESEARCH_ZERGGROUNDARMORLEVEL1 in abilities:
+                    abilities = [AbilityId.RESEARCH_ZERGGROUNDARMORLEVEL1]
+                if AbilityId.RESEARCH_ZERGGROUNDARMORLEVEL2 in abilities:
+                    abilities = [AbilityId.RESEARCH_ZERGGROUNDARMORLEVEL2]
+                if AbilityId.RESEARCH_ZERGGROUNDARMORLEVEL3 in abilities:
+                    abilities = [AbilityId.RESEARCH_ZERGGROUNDARMORLEVEL3]
                 if AbilityId.RESEARCH_GLIALREGENERATION in abilities:
                     abilities.remove(AbilityId.RESEARCH_GLIALREGENERATION)
                 if AbilityId.RESEARCH_MUSCULARAUGMENTS in abilities and self.count_unit(UnitTypeId.HYDRALISK) < 10:
@@ -753,7 +760,7 @@ class MyBot(sc2.BotAI):
     @property_cache_once_per_frame
     def visible_enemy_units(self) -> Units:
         def alive_and_can_attack(u: Unit) -> bool:
-            return u.health > 0 and not u.is_structure and (u._type_data._proto.food_required > 0)
+            return u.health > 0 and not u.is_structure and (u._type_data._proto.food_required)
 
         return self.known_enemy_units.filter(alive_and_can_attack)
 
@@ -870,8 +877,6 @@ class MyBot(sc2.BotAI):
             scouts = self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units)
         else:
             scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
-        if not scouts.exists:
-            scouts = self.units(UnitTypeId.OVERLORD).tags_not_in(self.scout_units)
         return scouts
 
     async def scout_expansions(self):
@@ -881,9 +886,9 @@ class MyBot(sc2.BotAI):
         ):
             return
         s = self.potential_scout_units()
-        print("Prepare to scout")
+        print("Prepare to scout", self.time)
         if s.exists:
-            print("Scout unit exists")
+            print("Scout unit exists", self.time)
             scout = s.random
             self.scout_units.add(scout.tag)
             locs = self.enemy_start_locations[0].sort_by_distance(list(self.expansion_locations.keys()))
