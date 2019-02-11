@@ -728,7 +728,7 @@ class MyBot(sc2.BotAI):
 
     @property_cache_once_per_frame
     def enemy_early_aggressive(self):
-        if self.townhalls.amount == 2 and \
+        if self.townhalls.ready.amount == 2 and \
                 self.enemy_expansions_count == 1 and \
                 self.known_enemy_structures.of_type({UnitTypeId.WARPGATE, UnitTypeId.BARRACKS}).amount > 3:
             return True
