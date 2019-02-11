@@ -928,7 +928,7 @@ class MyBot(sc2.BotAI):
         if self.time - self.time_table[func.__name__] >= seconds:
             await func()
 
-    async def chat_if_changed(self, key, value, additional):
+    async def chat_if_changed(self, key, value, additional=None):
         if key not in self.value_table:
             await self.chat_send(f"{self.time_formatted} {key}: None -> {value}")
             if additional:
