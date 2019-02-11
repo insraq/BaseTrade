@@ -29,7 +29,7 @@ class MyBot(sc2.BotAI):
         self.base_trade_units = set()
         self.resource_list: List[List] = None
         self.time_table = {}
-        self.value_table={}
+        self.value_table = {}
         self.units_health: Dict[int, Union[int, float]] = {}
         self.units_attacked: Units = None
         self.creep_queen_tag = 0
@@ -201,7 +201,7 @@ class MyBot(sc2.BotAI):
 
         # attacks
         if self.enemy_near_townhall.exists:
-            if self.enemy_near_townhall.amount > self.forces.amount + self.count_spinecrawler() * 2:
+            if self.forces.amount + self.count_spinecrawler() <= 0:
                 ws = self.workers.closer_than(20, self.enemy_near_townhall.first.position)
                 n = min(ws.amount, round(self.enemy_near_townhall.amount * 1.5))
                 if ws.filter(lambda w: w.is_attacking).amount < n:
@@ -234,6 +234,7 @@ class MyBot(sc2.BotAI):
                             unit(AbilityId.EFFECT_SPAWNLOCUSTS, self.enemy_near_townhall.first.position))
         elif self.supply_used > 190 or self.surplus_forces > len(self.base_trade_units) * 0.5:
             for w in self.workers:
+                w: Unit = w
                 if w.is_attacking:
                     self.actions.append(w.stop())
             for unit in self.forces:
@@ -248,6 +249,7 @@ class MyBot(sc2.BotAI):
                     self.move_and_attack(unit, self.attack_target)
         else:
             for w in self.workers:
+                w: Unit = w
                 if w.is_attacking:
                     self.actions.append(w.stop())
             t = self.expand_target if self.expand_target is not None else self.rally_point
@@ -285,15 +287,8 @@ class MyBot(sc2.BotAI):
                 continue
             if x.type_id == UnitTypeId.DRONE:
                 another_townhall = self.townhalls.further_than(25, x.position)
-                if self.forces.amount > enemy_nearby.amount and \
-                        another_townhall.exists and self.townhalls.ready.amount > 3:
+                if another_townhall.exists:
                     self.actions.append(x.move(another_townhall.first.position))
-                elif workers_nearby.amount > 2:
-                    self.actions.append(x.attack(enemy_nearby.first))
-                    for w in workers_nearby:
-                        w: Unit = w
-                        if not w.is_attacking:
-                            self.actions.append(w.attack(enemy_nearby.first))
             elif x.is_structure:
                 if x.build_progress < 1 and x.health_percentage < min(x.build_progress, HEALTH_PERCENT):
                     self.actions.append(x(AbilityId.CANCEL))
@@ -731,6 +726,14 @@ class MyBot(sc2.BotAI):
         else:
             return 0
 
+    @property_cache_once_per_frame
+    def enemy_early_aggressive(self):
+        if self.townhalls.amount == 2 and \
+                self.enemy_expansions_count == 1 and \
+                self.known_enemy_structures.of_type({UnitTypeId.WARPGATE, UnitTypeId.BARRACKS}).amount > 3:
+            return True
+        return False
+
     def can_place_creep_tumor(self, t: Point2) -> bool:
         creep_tumors = self.units.of_type({
             UnitTypeId.CREEPTUMOR,
@@ -932,7 +935,6 @@ class MyBot(sc2.BotAI):
             await self.chat_send(f"{self.time_formatted} {key}: {self.value_table[key]} -> {value}")
             self.value_table[key] = value
 
-
     def can_afford_or_change_production(self, u):
 
         def remove_if_exists(l, i):
@@ -1107,6 +1109,10 @@ class MyBot(sc2.BotAI):
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
                 self.count_spinecrawler() < min(t, self.townhalls.ready.amount + 1):
             await self.build_spine_crawler()
+
+        if self.enemy_early_aggressive and self.time > 60 * 4 + 20 and self.count_spinecrawler() < 6:
+            await self.build_spine_crawler()
+
         if 0 < self.townhalls.ready.amount < 3 and (
                 proxy_barracks.exists or
                 enemy_units.amount > min(self.count_unit(UnitTypeId.ZERGLING), 5) or
