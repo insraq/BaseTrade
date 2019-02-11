@@ -29,6 +29,7 @@ class MyBot(sc2.BotAI):
         self.base_trade_units = set()
         self.resource_list: List[List] = None
         self.time_table = {}
+        self.value_table={}
         self.units_health: Dict[int, Union[int, float]] = {}
         self.units_attacked: Units = None
         self.creep_queen_tag = 0
@@ -70,6 +71,31 @@ class MyBot(sc2.BotAI):
         e = self.enemy_start_locations[0].closest(corners)
         self.far_corners = corners - {s, e}
 
+    # ._type_data._proto
+    # unit_id: 104
+    # name: "Drone"
+    # available: true
+    # cargo_size: 1
+    # attributes: Light
+    # attributes: Biological
+    # movement_speed: 2.8125
+    # armor: 0.0
+    # weapons
+    # {
+    #     type: Ground
+    #     damage: 5.0
+    #     attacks: 1
+    #     range: 0.10009765625
+    #     speed: 1.5
+    # }
+    # mineral_cost: 50
+    # vespene_cost: 0
+    # food_required: 1.0
+    # ability_id: 1342
+    # race: Zerg
+    # build_time: 272.0
+    # sight_range: 8.0
+
     async def on_unit_destroyed(self, unit_tag):
         if unit_tag in self.enemy_forces:
             self.enemy_has_changed = True
@@ -104,6 +130,8 @@ class MyBot(sc2.BotAI):
         self.forces = attack_units.tags_not_in(self.scout_units | self.base_trade_units)
 
         half_size = self.start_location.distance_to(self.game_info.map_center)
+
+        await self.chat_if_changed("enemy_expansions_count", self.enemy_expansions_count)
 
         # if i don't even have a townhall
         # this has to be there because sometimes `self.townhalls` returns nothing even though there're clearly townhalls
@@ -286,7 +314,8 @@ class MyBot(sc2.BotAI):
             for i, a in enumerate(abilities):
                 if AbilityId.SPAWNCHANGELING_SPAWNCHANGELING in a:
                     u: Unit = overseers[i]
-                    if u.distance_to(self.attack_target) > 25:
+                    if u.distance_to(self.attack_target) > 25 and \
+                            not has_order(u, AbilityId.SPAWNCHANGELING_SPAWNCHANGELING):
                         self.actions.append(
                             u.move(self.attack_target.towards_with_random_angle(self.game_info.map_center, 25)))
                     self.actions.append(u(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING, queue=True))
@@ -452,6 +481,7 @@ class MyBot(sc2.BotAI):
 
         await self.call_every(self.scout_expansions, 2 * 60)
         await self.call_every(self.scout_watchtower, 60)
+        await self.call_every(self.chat_resource, 30)
         await self.fill_creep_tumor()
         await self.make_overseer()
 
@@ -894,6 +924,15 @@ class MyBot(sc2.BotAI):
         if self.time - self.time_table[func.__name__] > seconds:
             await func()
 
+    async def chat_if_changed(self, key, value):
+        if key not in self.value_table:
+            await self.chat_send(f"{self.time_formatted} {key}: None -> {value}")
+            self.value_table[key] = value
+        elif self.value_table[key] != value:
+            await self.chat_send(f"{self.time_formatted} {key}: {self.value_table[key]} -> {value}")
+            self.value_table[key] = value
+
+
     def can_afford_or_change_production(self, u):
 
         def remove_if_exists(l, i):
@@ -920,6 +959,14 @@ class MyBot(sc2.BotAI):
         else:
             scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
         return scouts
+
+    async def chat_resource(self):
+        s = self.state.score
+        await self.chat_send(
+            f"{self.time_formatted} M = {s.lost_minerals_army} V = {s.lost_vespene_army} "
+            f"EM = {s.killed_minerals_army} EV = {s.killed_vespene_army}"
+        )
+        self.time_table["chat_resource"] = self.time
 
     async def scout_expansions(self):
         if self.townhalls.amount <= 2 and (
