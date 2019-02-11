@@ -46,7 +46,6 @@ class MyBot(sc2.BotAI):
         self.first_overlord_tag = 0
         self.second_overlord_tag = 0
         self.iteration = 0
-        self.reached_full_supply = False
         self.expand_target: Point2 = None
         self.air_defense = set()
         self.last_extractor_time = 0
@@ -655,6 +654,8 @@ class MyBot(sc2.BotAI):
             return False
         if not self.units.of_type({UnitTypeId.HYDRALISKDEN, UnitTypeId.ROACHWARREN}).exists:
             return True
+        if self.enemy_expansions_count >= self.townhalls.amount:
+            return True
         return self.est_defense_surplus >= 0 or self.really_need_workers
 
     def calc_creep_tumor_position(self, u: Unit):
@@ -972,9 +973,11 @@ class MyBot(sc2.BotAI):
     async def heartbeat(self):
         s = self.state.score
         await self.chat_send(
-            f"{self.time_formatted} M = {s.killed_minerals_army + s.killed_minerals_economy - s.lost_minerals_army - s.lost_minerals_economy} "
-            f"V = {s.killed_vespene_army + s.killed_vespene_economy - s.lost_vespene_army - s.lost_vespene_economy} "
-            f"SF = {self.surplus_forces} ESF = {self.est_surplus_forces}"
+            f"{self.time_formatted} "
+            f"M:{s.killed_minerals_army + s.killed_minerals_economy - s.lost_minerals_army - s.lost_minerals_economy} "
+            f"V:{s.killed_vespene_army + s.killed_vespene_economy - s.lost_vespene_army - s.lost_vespene_economy} "
+            f"SF:{self.surplus_forces} ESF:{self.est_surplus_forces} "
+            f"EDF:{self.est_defense_surplus} D:{self.enemy_forces_distance}"
         )
         self.time_table["heartbeat"] = self.time
 
