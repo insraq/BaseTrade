@@ -921,7 +921,7 @@ class MyBot(sc2.BotAI):
     async def call_every(self, func, seconds):
         if func.__name__ not in self.time_table:
             self.time_table[func.__name__] = 0
-        if self.time - self.time_table[func.__name__] > seconds:
+        if self.time - self.time_table[func.__name__] >= seconds:
             await func()
 
     async def chat_if_changed(self, key, value):
