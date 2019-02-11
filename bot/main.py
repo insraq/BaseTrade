@@ -132,6 +132,7 @@ class MyBot(sc2.BotAI):
         half_size = self.start_location.distance_to(self.game_info.map_center)
 
         await self.chat_if_changed("enemy_expansions_count", self.enemy_expansions_count)
+        await self.chat_if_changed("enemy_early_aggressive", self.enemy_early_aggressive)
 
         # if i don't even have a townhall
         # this has to be there because sometimes `self.townhalls` returns nothing even though there're clearly townhalls
@@ -439,10 +440,8 @@ class MyBot(sc2.BotAI):
         if self.units(UnitTypeId.SPAWNINGPOOL).ready.exists:
             if self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
                 self.production_order = [UnitTypeId.ZERGLING]
-            elif self.townhalls.ready.amount == 2 and \
-                    self.enemy_expansions_count < 2 and \
-                    self.count_unit(UnitTypeId.ZERGLING) < 20:
-                self.production_order.insert(0, UnitTypeId.ZERGLING)
+            elif self.enemy_early_aggressive and self.count_unit(UnitTypeId.ZERGLING) < 20 and self.time > 4 * 60:
+                self.production_order = [UnitTypeId.ZERGLING]
             elif self.units.of_type({
                 UnitTypeId.ROACHWARREN,
                 UnitTypeId.HYDRALISKDEN,
@@ -1108,7 +1107,7 @@ class MyBot(sc2.BotAI):
         t = max(self.enemy_forces_supply / 3,
                 self.known_enemy_structures.of_type({UnitTypeId.WARPGATE, UnitTypeId.BARRACKS}).amount)
 
-        if self.enemy_early_aggressive and self.time > 60 * 4 and self.count_spinecrawler() < 6:
+        if self.enemy_early_aggressive and self.time > 4 * 60 and self.count_spinecrawler() < 6:
             await self.build_spine_crawler()
         elif self.townhalls.ready.amount > 1 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
