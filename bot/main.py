@@ -346,7 +346,7 @@ class MyBot(sc2.BotAI):
                 z.patrol(p.towards(self.game_info.map_center, 10), queue=True),
             ])
 
-        if self.should_base_trade():
+        if self.should_base_trade:
             for f in self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units):
                 if f.is_patrolling:
                     self.actions.append(f.attack(self.enemy_start_locations[0]))
@@ -608,6 +608,7 @@ class MyBot(sc2.BotAI):
         return self.count_unit(UnitTypeId.DRONE) < self.townhalls.ready.amount * 16 + self.units(
             UnitTypeId.EXTRACTOR).ready.amount * 3
 
+    @property_cache_once_per_frame
     def should_base_trade(self):
         half_size = self.start_location.distance_to(self.game_info.map_center)
         if self.enemy_forces_distance < half_size:
