@@ -219,7 +219,7 @@ class MyBot(sc2.BotAI):
                 # fight within spinecrawler
                 sc = self.units(UnitTypeId.SPINECRAWLER)
                 if not sc.exists or self.enemy_near_townhall.not_flying.amount <= 0 or \
-                        sc.closest_distance_to(self.enemy_near_townhall.first) > 15:
+                        self.enemy_near_townhall.closest_distance_to(self.rally_point) > 10:
                     self.move_and_attack(unit, self.enemy_near_townhall.first.position)
                     continue
                 if sc.filter(lambda u: u.is_ready and u.is_attacking).exists or \
@@ -310,8 +310,9 @@ class MyBot(sc2.BotAI):
             for i, a in enumerate(abilities):
                 if AbilityId.SPAWNCHANGELING_SPAWNCHANGELING in a:
                     u: Unit = overseers[i]
-                    if u.distance_to(self.attack_target) > 25 and \
-                            not has_order(u, AbilityId.SPAWNCHANGELING_SPAWNCHANGELING):
+                    if has_order(u, AbilityId.SPAWNCHANGELING_SPAWNCHANGELING):
+                        continue
+                    if u.distance_to(self.attack_target) > 25:
                         self.actions.append(
                             u.move(self.attack_target.towards_with_random_angle(self.game_info.map_center, 25)))
                     self.actions.append(u(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING, queue=True))
@@ -475,7 +476,7 @@ class MyBot(sc2.BotAI):
 
         await self.call_every(self.scout_expansions, 2 * 60)
         await self.call_every(self.scout_watchtower, 60)
-        await self.call_every(self.chat_resource, 30)
+        await self.call_every(self.heartbeat, 60)
         await self.fill_creep_tumor()
         await self.make_overseer()
 
@@ -967,13 +968,14 @@ class MyBot(sc2.BotAI):
             scouts = self.units(UnitTypeId.ZERGLING).tags_not_in(self.scout_units)
         return scouts
 
-    async def chat_resource(self):
+    async def heartbeat(self):
         s = self.state.score
         await self.chat_send(
-            f"{self.time_formatted} M = {s.lost_minerals_army} V = {s.lost_vespene_army} "
-            f"EM = {s.killed_minerals_army} EV = {s.killed_vespene_army}"
+            f"{self.time_formatted} M = {s.killed_minerals_army + s.killed_minerals_economy - s.lost_minerals_army - s.lost_minerals_economy} "
+            f"V = {s.killed_vespene_army + s.killed_vespene_economy - s.lost_vespene_army - s.lost_vespene_economy} "
+            f"SF = {self.surplus_forces} ESF = {self.est_surplus_forces}"
         )
-        self.time_table["chat_resource"] = self.time
+        self.time_table["heartbeat"] = self.time
 
     async def scout_expansions(self):
         if self.townhalls.amount <= 2 and (
