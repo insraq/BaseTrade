@@ -1054,15 +1054,15 @@ class MyBot(sc2.BotAI):
         sc = self.units(UnitTypeId.SPINECRAWLER)
         if sc.exists:
             result = await self.build(UnitTypeId.SPINECRAWLER, sc.furthest_to(self.start_location).position, 4,
-                                      placement_step=1)
+                                      placement_step=1, random_alternative=False)
         elif self.townhalls.exists:
             result = await self.build(UnitTypeId.SPINECRAWLER,
                                       self.townhalls.furthest_to(self.start_location).position.towards(
-                                          self.game_info.map_center, 6), 4, placement_step=1)
+                                          self.game_info.map_center, 6), 4, placement_step=1, random_alternative=False)
         else:
             result = await self.build(UnitTypeId.SPINECRAWLER,
                                       self.start_location.towards(self.game_info.map_center, 6), 4,
-                                      placement_step=1)
+                                      placement_step=1, random_alternative=False)
         return result
 
     def should_expand(self):
