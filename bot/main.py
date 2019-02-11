@@ -69,7 +69,7 @@ class MyBot(sc2.BotAI):
         corners = {Point2((a.x, a.y)), Point2((a.x, a.height)), Point2((a.width, a.y)), Point2((a.width, a.height))}
         self.my_corner = self.start_location.closest(corners)
         self.enemy_corner = self.enemy_start_locations[0].closest(corners)
-        self.far_corners = corners - {self.enemy_corner, self.far_corners}
+        self.far_corners = corners - {self.my_corner, self.enemy_corner}
 
     # ._type_data._proto
     # unit_id: 104
