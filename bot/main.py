@@ -769,7 +769,11 @@ class MyBot(sc2.BotAI):
             await self.build(UnitTypeId.EVOLUTIONCHAMBER, near=self.find_building_location(self.hq.position))
 
     def find_building_location(self, t: Unit) -> Point2:
-        return backwards(t.position, self.state.mineral_field.closer_than(10, t.position).center, 10)
+        m = self.state.mineral_field.closer_than(10, t.position)
+        if m.exists:
+            return backwards(t.position, m.center, 10)
+        else:
+            return t.position.towards_with_random_angle(self.game_info.map_center, 10)
 
     def should_build(self, b):
         return not self.units(b).exists and self.already_pending(b) == 0 and self.can_afford(b)
