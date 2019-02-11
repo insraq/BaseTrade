@@ -789,7 +789,9 @@ class MyBot(sc2.BotAI):
                         b) and self.is_location_safe(p):
                     if b == UnitTypeId.ROACHWARREN and self.count_unit(UnitTypeId.DRONE) < 16 * 2:
                         return
-                    if b == UnitTypeId.BANELINGNEST and self.count_unit(UnitTypeId.DRONE) < 16 * 2:
+                    if b == UnitTypeId.BANELINGNEST and \
+                            self.count_unit(UnitTypeId.DRONE) < 16 * 2 and \
+                            not self.enemy_early_aggressive:
                         return
                     if b == UnitTypeId.INFESTATIONPIT and not self.units(UnitTypeId.LAIR).ready.exists:
                         return
@@ -1105,12 +1107,12 @@ class MyBot(sc2.BotAI):
         # build spinecrawlers
         t = max(self.enemy_forces_supply / 3,
                 self.known_enemy_structures.of_type({UnitTypeId.WARPGATE, UnitTypeId.BARRACKS}).amount)
-        if self.townhalls.ready.amount > 1 and \
+
+        if self.enemy_early_aggressive and self.time > 60 * 4 and self.count_spinecrawler() < 6:
+            await self.build_spine_crawler()
+        elif self.townhalls.ready.amount > 1 and \
                 self.units(UnitTypeId.SPAWNINGPOOL).ready and \
                 self.count_spinecrawler() < min(t, self.townhalls.ready.amount + 1):
-            await self.build_spine_crawler()
-
-        if self.enemy_early_aggressive and self.time > 60 * 4 + 20 and self.count_spinecrawler() < 6:
             await self.build_spine_crawler()
 
         if 0 < self.townhalls.ready.amount < 3 and (
