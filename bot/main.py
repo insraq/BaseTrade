@@ -67,9 +67,9 @@ class MyBot(sc2.BotAI):
         self.expansion_locations.keys()
         a: Rect = self.game_info.playable_area
         corners = {Point2((a.x, a.y)), Point2((a.x, a.height)), Point2((a.width, a.y)), Point2((a.width, a.height))}
-        s = self.start_location.closest(corners)
-        e = self.enemy_start_locations[0].closest(corners)
-        self.far_corners = corners - {s, e}
+        self.my_corner = self.start_location.closest(corners)
+        self.enemy_corner = self.enemy_start_locations[0].closest(corners)
+        self.far_corners = corners - {self.enemy_corner, self.far_corners}
 
     # ._type_data._proto
     # unit_id: 104
@@ -821,7 +821,7 @@ class MyBot(sc2.BotAI):
         if self.known_enemy_structures.exists:
             target = self.known_enemy_structures.furthest_to(self.enemy_start_locations[0])
             return target.position
-        return self.enemy_start_locations[0]
+        return self.enemy_corner
 
     @property_cache_once_per_frame
     def enemy_near_townhall(self) -> Units:
@@ -928,12 +928,16 @@ class MyBot(sc2.BotAI):
         if self.time - self.time_table[func.__name__] >= seconds:
             await func()
 
-    async def chat_if_changed(self, key, value):
+    async def chat_if_changed(self, key, value, additional):
         if key not in self.value_table:
             await self.chat_send(f"{self.time_formatted} {key}: None -> {value}")
+            if additional:
+                additional(key, "None", value)
             self.value_table[key] = value
         elif self.value_table[key] != value:
             await self.chat_send(f"{self.time_formatted} {key}: {self.value_table[key]} -> {value}")
+            if additional:
+                additional(key, self.value_table[key], value)
             self.value_table[key] = value
 
     def can_afford_or_change_production(self, u):
