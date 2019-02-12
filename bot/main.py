@@ -447,9 +447,11 @@ class MyBot(sc2.BotAI):
             if self.count_unit(UnitTypeId.ZERGLING) < 6 + self.state.units(UnitTypeId.XELNAGATOWER).amount:
                 self.production_order = [UnitTypeId.ZERGLING]
             elif self.enemy_early_aggressive and self.count_unit(UnitTypeId.ZERGLING) < 20 and self.time > 4 * 60:
-                self.production_order = [UnitTypeId.ZERGLING]
+                self.production_order.append(UnitTypeId.ZERGLING)
+                self.production_order = list(filter(lambda i: i != UnitTypeId.DRONE, self.production_order))
             elif self.enemy_early_greedy and self.surplus_forces < 20 and self.time > 4 * 60:
-                self.production_order = [UnitTypeId.ZERGLING]
+                self.production_order.append(UnitTypeId.ZERGLING)
+                self.production_order = list(filter(lambda i: i != UnitTypeId.DRONE, self.production_order))
             elif self.units.of_type({
                 UnitTypeId.ROACHWARREN,
                 UnitTypeId.HYDRALISKDEN,
