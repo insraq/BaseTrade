@@ -442,6 +442,8 @@ class MyBot(sc2.BotAI):
                 self.production_order = [UnitTypeId.ZERGLING]
             elif self.enemy_early_aggressive and self.count_unit(UnitTypeId.ZERGLING) < 20 and self.time > 4 * 60:
                 self.production_order = [UnitTypeId.ZERGLING]
+            elif self.enemy_early_greedy and self.surplus_forces < 20 and self.time > 4 * 60:
+                self.production_order = [UnitTypeId.ZERGLING]
             elif self.units.of_type({
                 UnitTypeId.ROACHWARREN,
                 UnitTypeId.HYDRALISKDEN,
@@ -733,6 +735,12 @@ class MyBot(sc2.BotAI):
         if self.townhalls.ready.amount == 2 and \
                 self.enemy_expansions_count == 1 and \
                 self.known_enemy_structures.of_type({UnitTypeId.WARPGATE, UnitTypeId.BARRACKS}).amount > 3:
+            return True
+        return False
+
+    @property_cache_once_per_frame
+    def enemy_early_greedy(self):
+        if self.townhalls.ready.amount == 2 and self.enemy_expansions_count > 2:
             return True
         return False
 
