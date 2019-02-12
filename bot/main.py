@@ -299,7 +299,11 @@ class MyBot(sc2.BotAI):
             elif x.type_id == UnitTypeId.OVERSEER:
                 self.actions.append(x(AbilityId.SPAWNCHANGELING_SPAWNCHANGELING))
             elif x.tag == self.first_overlord_tag:
-                self.actions.append(x.move(x.position.towards(self.game_info.map_center, 10)))
+                if self.visible_enemy_units:
+                    t = backwards(x.position, self.visible_enemy_units.closest_to(x).position, 10)
+                else:
+                    t = x.position.towards(self.game_info.map_center, 10)
+                self.actions.append(x.move(t))
             elif x.type_id == UnitTypeId.OVERLORD:
                 self.actions.append(x.move(x.position.towards(self.start_location, 10)))
 
