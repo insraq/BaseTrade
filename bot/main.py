@@ -132,6 +132,7 @@ class MyBot(sc2.BotAI):
 
         await self.chat_if_changed("enemy_expansions_count", self.enemy_expansions_count)
         await self.chat_if_changed("enemy_early_aggressive", self.enemy_early_aggressive)
+        await self.chat_if_changed("enemy_early_greedy", self.enemy_early_greedy)
 
         # if i don't even have a townhall
         # this has to be there because sometimes `self.townhalls` returns nothing even though there're clearly townhalls
@@ -339,7 +340,8 @@ class MyBot(sc2.BotAI):
         else:
             p = self.enemy_start_locations[0].closest(self.far_corners)
         zs = self.units(UnitTypeId.ZERGLING).tags_not_in(self.base_trade_units | self.scout_units)
-        if self.est_defense_surplus > 0 and zs.exists and self.townhalls.amount > 2 and \
+        if not self.enemy_early_greedy and not self.enemy_early_aggressive and \
+                self.est_defense_surplus > 0 and zs.exists and self.townhalls.amount > 2 and \
                 self.units(UnitTypeId.ZERGLING).tags_in(self.base_trade_units).amount < self.forces.amount and \
                 self.already_pending_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED) == 1:
             z = zs.random
